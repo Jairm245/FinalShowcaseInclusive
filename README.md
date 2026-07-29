@@ -1,16 +1,18 @@
-# Snap Clone — Starter Project
+# Snap Love
 
-A minimal Snapchat-look-alike starter fullstack mobile dev.
-It ships with exactly two things working end-to-end:
+We recently paired with rainbow labs to find out what the youth of ages 12-18 are struggling with and that is finding a safe space where they can express themselves and fight isolation. This feature was made to help people being able to express themselves and inspire others to do the same by following in their foot steps
 
 1. A Snapchat-styled **login/sign-up screen** (Supabase Auth, email + password)
 2. A **full-screen camera** that opens right after login (Expo Camera —
    capture photo, flip camera, toggle flash, preview + retake)
-
-Everything else — Stories, chat, friends, disappearing snaps, sending a
-snap to someone — is left as an exercise. There's a `TODO (students)` comment
-in `src/screens/CameraScreen.tsx` and `src/lib/supabase.ts` marking the two
-places you'll extend first.
+3. being able to add hearts to represent how people identify themselves as.
+4. changing the background of the chat
+5. changing the background of the profile screen to where the user can add stickers or utalize previously made snap features such the pets they have.
+6. Adding pronouns
+7. spotlight feature.
+8. sponsored hearts
+9. border around the profile picture
+10. tbd
 
 ## Tech stack
 
@@ -43,7 +45,10 @@ const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
 
 ```bash
 npm install
+npm install expo
 npx expo start
+@supabase/supabase-js
+tbd
 ```
 
 Scan the QR code with the **Expo Go** app (SDK 54 build) on your phone.
