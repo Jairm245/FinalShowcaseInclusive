@@ -1,17 +1,14 @@
-import { Image, Text, View, Button, StyleSheet, Pressable } from "react-native";
+import {Image,Text,View,Button,StyleSheet,} from "react-native";
 import { supabase } from "../../utils/hooks/supabase";
-import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
-// import { findAstrologySign } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 const handleSignOut = async () => {
   try {
     const { error } = await supabase.auth.signOut();
+
     if (error) {
       console.error("Error signing out:", error.message);
-    } else {
-      // Handle successful sign out (e.g., redirect to login screen)
     }
   } catch (error) {
     console.error("Unexpected error:", error);
@@ -21,64 +18,75 @@ const handleSignOut = async () => {
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { user } = useAuthentication();
-  const [astrology, setAstrology] = useState("Pisces");
-  const userSign = findAstrologySign();
-
-  (useEffect(() => {
-    setAstrology(userSign.sign);
-  }),
-    []);
 
   return (
-    <View style={{ alignItems: "center" }}>
+    <View style={styles.container}>
       <Image
-        source={{ uri: "https://i.imgur.com/FxsJ3xy.jpg" }}
-        style={{ width: 150, height: 150, borderRadius: 150 / 2 }}
-      />
-      <Text
-        style={{
-          justifyContents: "center",
-          textAlign: "center",
+        source={{
+          uri: "https://i.imgur.com/FxsJ3xy.jpg",
         }}
-      >
-        {user &&
-          user.user_metadata &&
-          user.user_metadata.email.slice(
-            0,
-            user.user_metadata.email.indexOf("@"), // gets part before @ of email address, should use profile username instead
-          )}
+        style={styles.avatar}
+      />
+
+      <Text style={styles.username}>
+        {user?.user_metadata?.email?.slice(
+          0,
+          user.user_metadata.email.indexOf("@"),
+        )}
       </Text>
-      <Button
-        onPress={() => {
-          navigation.navigate("Astrology");
-        }}
-        title={astrology}
-        color="#841584"
-        accessibilityLabel="Learn more about this purple button"
-      />
-      <Button onPress={handleSignOut} title="Log Out" />
-      <Pressable>
+
+      {/* Opens the BackgroundBuild screen */}
+      <View style={styles.buttonContainer}>
         <Button
           onPress={() => {
-            navigation.navigate("Settings", {});
+            navigation.navigate("BackgroundBuild");
+          }}
+          title="Change Background"
+        />
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          onPress={() => {
+            navigation.navigate("Settings");
           }}
           title="Settings"
         />
-      </Pressable>
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          onPress={handleSignOut}
+          title="Log Out"
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     width: "100%",
     flexDirection: "column",
     alignItems: "center",
+    justifyContent: "center",
   },
+
   avatar: {
     width: 150,
     height: 150,
-    borderRadius: 150 / 2,
-    alignItems: "center",
+    borderRadius: 75,
+    marginBottom: 10,
+  },
+
+  username: {
+    textAlign: "center",
+    marginBottom: 10,
+  },
+
+  buttonContainer: {
+    width: 220,
+    marginVertical: 5,
   },
 });
