@@ -12,6 +12,7 @@ import AstrologyScreen from "../screens/AstrologyScreen";
 import MemoryScreen from "../screens/MemoryScreen";
 import EventScreen from "../screens/EventScreen"; //New component by Sona and Christian
 import BackgroundBuild from "../screens/BackgroundBuild";
+import CustomizationScreen from "../screens/CustomizationScreen";
 
 const Stack = createStackNavigator();
 
@@ -73,6 +74,10 @@ export default function App() {
         <Stack.Screen
           name="BackgroundBuild"
           component={BackgroundBuild}
+        />
+        <Stack.Screen
+          name="CustomizationScreen"
+          component={CustomizationScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>
