@@ -20,6 +20,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { supabase } from "../../utils/hooks/supabase";
+import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 const NETWORK_HEADERS = {
   "User-Agent":
@@ -115,6 +116,7 @@ function InteractiveStickerLayer({ layer, isSelected, onSelect }) {
 
 // --- Main Creator Screen ---
 export default function CustomizationScreen({ navigation }) {
+  const { user } = useAuthentication();
   const viewShotRef = useRef(null);
 
   // Customization States
@@ -209,23 +211,60 @@ export default function CustomizationScreen({ navigation }) {
 
   const saveAndUploadHeart = async () => {
     try {
+      if (!user) {
+        Alert.alert("Error", "You must be logged in to save your heart.");
+        return;
+      }
+
       setSelectedLayerId(null);
+
+      // 1. Capture the canvas view as PNG
       const uri = await viewShotRef.current.capture();
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      const fileName = `custom-hearts/${Date.now()}.png`;
+      // 2. Upload PNG to 'heartStorage' bucket
+      const fileName = `custom-hearts/${user.id}-${Date.now()}.png`;
       const { data, error } = await supabase.storage
-        .from("pictureStorage")
+        .from("heartStorage")
         .upload(fileName, arrayBuffer, { contentType: "image/png" });
 
       if (error) {
         Alert.alert("Upload Error", error.message);
+        return;
+      }
+
+      // 3. Get Public URL from 'heartStorage'
+      const { data: urlData } = supabase.storage
+        .from("heartStorage")
+        .getPublicUrl(fileName);
+
+      const publicUrl = urlData.publicUrl;
+
+      // 4. Save/Update public profile row in database
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: user.id,
+          custom_heart_url: publicUrl,
+          updated_at: new Date(),
+        });
+
+      // 5. Also sync to auth user metadata as fallback
+      await supabase.auth.updateUser({
+        data: { custom_heart_url: publicUrl },
+      });
+
+      if (profileError) {
+        Alert.alert("Error updating profile", profileError.message);
       } else {
-        Alert.alert("Saved!", "Your heart has been saved.");
+        Alert.alert("Saved!", "Your heart is now updated on your profile.", [
+          { text: "OK", onPress: () => navigation?.goBack() },
+        ]);
       }
     } catch (err) {
+      console.error("Save error:", err);
       Alert.alert("Error", "Could not save image.");
     }
   };
