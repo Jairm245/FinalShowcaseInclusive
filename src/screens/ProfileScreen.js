@@ -17,7 +17,7 @@ import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 // ✅ Fix 1: Use a relative path to import your local image asset
-import leaningAvatar from "../../assets/Leaning against wall greeting.png";
+import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
 
 const handleSignOut = async () => {
   try {
