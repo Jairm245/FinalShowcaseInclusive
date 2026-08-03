@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,93 +8,171 @@ import {
   ScrollView,
   Image,
   Alert,
+  SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
-import Svg, { Path, ClipPath, Defs, Image as SvgImage } from "react-native-svg";
+import Svg, { Path, ClipPath, Defs, Image as SvgImage, Text as SvgText, G } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ViewShot from "react-native-view-shot";
-import { supabase } from "../../utils/hooks/supabase"; //  Supabase client
-
 import Animated, {
-  useAnimatedStyle,
   useSharedValue,
+  useAnimatedProps,
   runOnJS,
 } from "react-native-reanimated";
+import { supabase } from "../../utils/hooks/supabase";
 
-// --- Draggable & Scalable Layer Component ---
-function InteractiveLayer({ children, onSelect, isSelected }) {
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
+const NETWORK_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+};
 
-  // Pan Gesture (Drag around)
+// Create an Animated version of SVG G (Group) component
+const AnimatedG = Animated.createAnimatedComponent(G);
+
+// Path definition shared across fill, border, and clip paths
+const HEART_PATH_D =
+  "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z";
+
+// --- Interactive Layer within SVG Bounds ---
+function InteractiveStickerLayer({ layer, isSelected, onSelect }) {
+  const translateX = useSharedValue(layer.x || 0);
+  const translateY = useSharedValue(layer.y || 0);
+  const scale = useSharedValue(layer.scale || 1);
+
   const panGesture = Gesture.Pan()
     .onStart(() => {
-      if (onSelect) {
-        runOnJS(onSelect)(); // Fixes crash when tapping/dragging layer
-      }
+      if (onSelect) runOnJS(onSelect)();
     })
     .onChange((e) => {
-      translateX.value += e.changeX;
-      translateY.value += e.changeY;
+      // Map screen drag coordinates to SVG viewBox scale space (24 / 250 scale ratio)
+      const nextX = translateX.value + e.changeX * (24 / 250);
+      const nextY = translateY.value + e.changeY * (24 / 250);
+
+      // Clamp coordinates to keep sticker origins within heart range
+      translateX.value = Math.max(-6, Math.min(6, nextX));
+      translateY.value = Math.max(-6, Math.min(6, nextY));
     });
 
-  // Pinch Gesture (Zoom/Resize)
   const pinchGesture = Gesture.Pinch().onChange((e) => {
-    scale.value *= e.scaleChange;
+    scale.value = Math.max(0.5, Math.min(3, scale.value * e.scaleChange));
   });
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
+  // Bind shared values to SVG transforms on the UI thread safely
+  const animatedGroupProps = useAnimatedProps(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
+
+  const clipId = `heartClipLayer-${layer.id}`;
 
   return (
     <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
-      <Animated.View
-        style={[
-          styles.layer,
-          animatedStyle,
-          isSelected && styles.selectedLayerBorder,
-        ]}
-      >
-        {children}
-      </Animated.View>
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+        <Svg width={250} height={250} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+          {/* Defs nested locally so this independent SVG context can access the clip path */}
+          <Defs>
+            <ClipPath id={clipId}>
+              <Path d={HEART_PATH_D} />
+            </ClipPath>
+          </Defs>
+
+          <G clipPath={`url(#${clipId})`}>
+            <AnimatedG animatedProps={animatedGroupProps}>
+              {layer.type === "sticker" ? (
+                <SvgImage
+                  href={layer.source}
+                  x="8"
+                  y="8"
+                  width="8"
+                  height="8"
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              ) : (
+                <SvgText
+                  x="12"
+                  y="12"
+                  fill={layer.color || "#FFFFFF"}
+                  fontSize="3"
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  alignmentBaseline="central"
+                >
+                  {layer.content}
+                </SvgText>
+              )}
+            </AnimatedG>
+          </G>
+        </Svg>
+      </View>
     </GestureDetector>
   );
 }
 
 // --- Main Creator Screen ---
-export default function CustomizationScreen() {
+export default function CustomizationScreen({ navigation }) {
   const viewShotRef = useRef(null);
 
-  // Background Customizations
-  const [heartColor, setHeartColor] = useState("#FF2D55");
-  const [selectedPattern, setSelectedImage] = useState(null);
+  // Customization States
+  const [fillColor, setFillColor] = useState("#FFF000");
+  const [strokeColor, setStrokeColor] = useState("#8E44AD");
+  const [selectedPattern, setSelectedPattern] = useState(null);
 
-  // Layers State (Text & Stickers)
+  // Dynamic Stickers State from Supabase
+  const [stickers, setStickers] = useState([]);
+  const [loadingStickers, setLoadingStickers] = useState(true);
+
+  // Canvas Layers
   const [layers, setLayers] = useState([]);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [textInput, setTextInput] = useState("");
 
   // Presets
-  const colors = ["#FF2D55", "#FF9500", "#FFCC00", "#4CD964", "#5AC8FA", "#5856D6"];
+  const frameColors = ["#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", "#000000"];
+  const heartFillColors = ["#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", "#FFFFFF"];
+
   const patterns = [
     { id: "none", uri: null, label: "Solid" },
     { id: "glitter", uri: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400", label: "Glitter" },
     { id: "galaxy", uri: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400", label: "Galaxy" },
   ];
-  const stickers = [
-    "https://upload.wikimedia.org/wikipedia/commons/c/cd/Gilbert_Baker_Progress_Pride_flag-cropped.png",
-    "https://upload.wikimedia.org/wikipedia/commons/1/16/Queerhet_flag.png",
-    "https://upload.wikimedia.org/wikipedia/commons/8/81/Bisexual_LGBTQ%2B_Pride_Flag.png",
-    "https://upload.wikimedia.org/wikipedia/commons/6/61/Flag_of_Mexico%2C_1968.png"
-    
-  ];
 
-  // --- Layer Management ---
+  useEffect(() => {
+    fetchStickers();
+  }, []);
+
+  const fetchStickers = async () => {
+    try {
+      setLoadingStickers(true);
+      const { data, error } = await supabase
+        .from("stickers")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching stickers:", error.message);
+      } else if (data && data.length > 0) {
+        setStickers(data);
+      } else {
+        setStickers([
+          {
+            id: "mexico-flag",
+            image_url:
+              "https://upload.wikimedia.org/wikipedia/commons/6/61/Flag_of_Mexico%2C_1968.png",
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoadingStickers(false);
+    }
+  };
+
   const addTextLayer = () => {
     if (!textInput.trim()) return;
     const newLayer = {
@@ -102,16 +180,23 @@ export default function CustomizationScreen() {
       type: "text",
       content: textInput,
       color: "#FFFFFF",
+      x: 0,
+      y: 0,
+      scale: 1,
     };
     setLayers([...layers, newLayer]);
     setTextInput("");
   };
 
-  const addStickerLayer = (uri) => {
+  const addStickerLayer = (imageUrl) => {
+    if (!imageUrl) return;
     const newLayer = {
       id: Date.now().toString(),
       type: "sticker",
-      uri: uri,
+      source: { uri: imageUrl, headers: NETWORK_HEADERS },
+      x: 0,
+      y: 0,
+      scale: 1,
     };
     setLayers([...layers, newLayer]);
   };
@@ -122,21 +207,14 @@ export default function CustomizationScreen() {
     setSelectedLayerId(null);
   };
 
-  // --- Export & Upload to Supabase ---
   const saveAndUploadHeart = async () => {
     try {
-      // Unselect layers so selection borders aren't captured
       setSelectedLayerId(null);
-
-      // 1. Capture canvas as PNG
       const uri = await viewShotRef.current.capture();
-
-      // 2. Format file buffer
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      // 3. Upload to Supabase storage bucket
       const fileName = `custom-hearts/${Date.now()}.png`;
       const { data, error } = await supabase.storage
         .from("pictureStorage")
@@ -145,243 +223,352 @@ export default function CustomizationScreen() {
       if (error) {
         Alert.alert("Upload Error", error.message);
       } else {
-        Alert.alert("Success!", "Your custom heart has been saved!");
+        Alert.alert("Saved!", "Your heart has been saved.");
       }
     } catch (err) {
-      console.error(err);
-      Alert.alert("Error", "Could not export image.");
+      Alert.alert("Error", "Could not save image.");
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.headerTitle}>Heart Creator Studio</Text>
+    <View style={styles.container}>
+      {/* TOP CANVAS AREA */}
+      <View style={styles.topCanvasContainer}>
+        <SafeAreaView style={styles.floatingTopBar}>
+          <TouchableOpacity
+            style={styles.circleIconBtn}
+            onPress={() => navigation?.goBack()}
+          >
+            <Text style={styles.closeIcon}>✕</Text>
+          </TouchableOpacity>
 
-      {/* --- CANVAS WORKSPACE --- */}
-      <ViewShot ref={viewShotRef} options={{ format: "png", quality: 1 }}>
-        <View style={styles.canvas}>
-          {/* Base Heart Layer */}
-          <Svg width={200} height={200} viewBox="0 0 24 24">
-            <Defs>
-              <ClipPath id="heartClip">
-                <Path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-              </ClipPath>
-            </Defs>
+          <TouchableOpacity
+            style={styles.saveCapsuleBtn}
+            onPress={saveAndUploadHeart}
+          >
+            <Text style={styles.saveBtnText}>Save</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
 
-            {selectedPattern ? (
-              <SvgImage
-                href={{ uri: selectedPattern }}
-                width="24"
-                height="24"
-                preserveAspectRatio="xMidYMid slice"
-                clipPath="url(#heartClip)"
-              />
-            ) : (
-              <Path
-                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                fill={heartColor}
-              />
-            )}
-          </Svg>
+        {/* ViewShot Canvas Area */}
+        <ViewShot ref={viewShotRef} options={{ format: "png", quality: 1 }}>
+          <View style={styles.canvasArea}>
+            <Svg width={250} height={250} viewBox="0 0 24 24">
+              <Defs>
+                <ClipPath id="heartClipMain">
+                  <Path d={HEART_PATH_D} />
+                </ClipPath>
+              </Defs>
 
-          {/* Interactive Overlay Layers */}
-          {layers.map((layer) => (
-            <InteractiveLayer
-              key={layer.id}
-              isSelected={selectedLayerId === layer.id}
-              onSelect={() => setSelectedLayerId(layer.id)}
-            >
-              {layer.type === "text" ? (
-                <Text style={[styles.layerText, { color: layer.color }]}>
-                  {layer.content}
-                </Text>
+              {/* Heart Fill Background */}
+              {selectedPattern ? (
+                <SvgImage
+                  href={{ uri: selectedPattern }}
+                  x="0"
+                  y="0"
+                  width="100%"
+                  height="100%"
+                  preserveAspectRatio="xMidYMid slice"
+                  clipPath="url(#heartClipMain)"
+                />
               ) : (
-                <Image source={{ uri: layer.uri }} style={styles.stickerImage} />
+                <Path d={HEART_PATH_D} fill={fillColor} />
               )}
-            </InteractiveLayer>
-          ))}
-        </View>
-      </ViewShot>
 
-      {/* --- CANVA TOOLBAR CONTROLS --- */}
-      <View style={styles.toolbar}>
-        {/* Layer Controls */}
-        {selectedLayerId && (
-          <TouchableOpacity style={styles.deleteBtn} onPress={deleteSelectedLayer}>
-            <Text style={styles.deleteBtnText}>🗑 Delete Selected Item</Text>
-          </TouchableOpacity>
-        )}
+              {/* Outline Border */}
+              <Path
+                d={HEART_PATH_D}
+                fill="none"
+                stroke={strokeColor}
+                strokeWidth="1.2"
+                strokeLinejoin="round"
+              />
+            </Svg>
 
-        {/* Text Adding Tool */}
-        <Text style={styles.sectionTitle}>Add Custom Text</Text>
-        <View style={styles.textInputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type word/pronouns..."
-            placeholderTextColor="#888"
-            value={textInput}
-            onChangeText={setTextInput}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={addTextLayer}>
-            <Text style={styles.addBtnText}>Add</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Sticker Tool */}
-        <Text style={styles.sectionTitle}>Add Stickers</Text>
-        <View style={styles.row}>
-          {stickers.map((uri, idx) => (
-            <TouchableOpacity key={idx} onPress={() => addStickerLayer(uri)}>
-              <Image source={{ uri }} style={styles.stickerThumb} />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Base Heart Color / Pattern */}
-        <Text style={styles.sectionTitle}>Heart Base Pattern</Text>
-        <View style={styles.row}>
-          {patterns.map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[
-                styles.patternBox,
-                selectedPattern === p.uri && styles.selectedBorder,
-              ]}
-              onPress={() => setSelectedImage(p.uri)}
-            >
-              <Text style={styles.patternLabel}>{p.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {!selectedPattern && (
-          <View style={styles.row}>
-            {colors.map((c) => (
-              <TouchableOpacity
-                key={c}
-                style={[
-                  styles.colorDot,
-                  { backgroundColor: c },
-                  heartColor === c && styles.selectedBorder,
-                ]}
-                onPress={() => setHeartColor(c)}
+            {/* Draggable Layers Masked INSIDE Heart Bounds */}
+            {layers.map((layer) => (
+              <InteractiveStickerLayer
+                key={layer.id}
+                layer={layer}
+                isSelected={selectedLayerId === layer.id}
+                onSelect={() => setSelectedLayerId(layer.id)}
               />
             ))}
           </View>
-        )}
+        </ViewShot>
 
-        {/* Save/Export */}
-        <TouchableOpacity style={styles.saveBtn} onPress={saveAndUploadHeart}>
-          <Text style={styles.saveBtnText}>Save & Upload to Supabase</Text>
-        </TouchableOpacity>
+        <View style={styles.floatingControls}>
+          <TouchableOpacity style={styles.circleIconBtn}>
+            <Text style={styles.undoText}>↶</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.circleIconBtn}>
+            <Text style={styles.undoText}>↷</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </ScrollView>
+
+      {/* BOTTOM DRAWER */}
+      <View style={styles.bottomSheet}>
+        <View style={styles.handleBar} />
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {selectedLayerId && (
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={deleteSelectedLayer}
+            >
+              <Text style={styles.deleteBtnText}>🗑 Delete Selected Item</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Section 1: Frame */}
+          <Text style={styles.sectionHeader}>Frame</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
+            {frameColors.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.optionCard,
+                  { backgroundColor: color },
+                  strokeColor === color && styles.selectedOptionCard,
+                ]}
+                onPress={() => setStrokeColor(color)}
+              />
+            ))}
+          </ScrollView>
+
+          {/* Section 2: Heart Fill */}
+          <Text style={styles.sectionHeader}>Background</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
+            {heartFillColors.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.optionCard,
+                  { backgroundColor: color },
+                  fillColor === color && !selectedPattern && styles.selectedOptionCard,
+                ]}
+                onPress={() => {
+                  setSelectedPattern(null);
+                  setFillColor(color);
+                }}
+              />
+            ))}
+            {patterns.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={[
+                  styles.optionCard,
+                  styles.patternCard,
+                  selectedPattern === p.uri && styles.selectedOptionCard,
+                ]}
+                onPress={() => setSelectedPattern(p.uri)}
+              >
+                <Text style={styles.patternLabel}>{p.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Section 3: Add Text */}
+          <Text style={styles.sectionHeader}>Add Text</Text>
+          <View style={styles.textInputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Type word or pronouns..."
+              placeholderTextColor="#999"
+              value={textInput}
+              onChangeText={setTextInput}
+            />
+            <TouchableOpacity style={styles.addBtn} onPress={addTextLayer}>
+              <Text style={styles.addBtnText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Section 4: Dynamic Stickers */}
+          <Text style={styles.sectionHeader}>Stickers</Text>
+          {loadingStickers ? (
+            <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 10 }} />
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
+              {stickers.map((item) => (
+                <TouchableOpacity
+                  key={item.id || item.image_url}
+                  style={styles.stickerCard}
+                  onPress={() => addStickerLayer(item.image_url)}
+                >
+                  <Image
+                    source={{ uri: item.image_url, headers: NETWORK_HEADERS }}
+                    style={styles.stickerThumb}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    alignItems: "center",
-    backgroundColor: "#F2F2F7",
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: "#2C2C2E",
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    marginVertical: 15,
-    color: "#111",
-  },
-  canvas: {
-    width: 280,
-    height: 280,
-    backgroundColor: "#1C1C1E",
-    borderRadius: 24,
+  topCanvasContainer: {
+    flex: 1.1,
     justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
+    position: "relative",
   },
-  layer: {
+  floatingTopBar: {
     position: "absolute",
-    padding: 4,
+    top: 10,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  selectedLayerBorder: {
-    borderWidth: 1.5,
-    borderColor: "#007AFF",
-    borderStyle: "dashed",
-    borderRadius: 8,
+  circleIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  layerText: {
-    fontSize: 22,
+  closeIcon: {
+    color: "#FFF",
+    fontSize: 18,
     fontWeight: "bold",
   },
-  stickerImage: {
-    width: 65,
-    height: 65,
-    resizeMode: "contain",
-  },
-  toolbar: {
-    width: "100%",
-    backgroundColor: "#FFF",
+  saveCapsuleBtn: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     borderRadius: 20,
-    padding: 16,
-    marginTop: 20,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 12,
-    marginBottom: 8,
-    color: "#333",
+  saveBtnText: {
+    color: "#000000",
+    fontWeight: "bold",
+    fontSize: 15,
   },
-  row: {
+  canvasArea: {
+    width: 250,
+    height: 250,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  floatingControls: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
     flexDirection: "row",
-    gap: 12,
-    flexWrap: "wrap",
+    gap: 10,
+  },
+  undoText: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  bottomSheet: {
+    flex: 0.9,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E0E0E0",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 15,
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1C1C1E",
+    marginTop: 15,
     marginBottom: 10,
+  },
+  horizontalRow: {
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+  optionCard: {
+    width: 70,
+    height: 90,
+    borderRadius: 14,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#E5E5EA",
+  },
+  patternCard: {
+    backgroundColor: "#F2F2F7",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selectedOptionCard: {
+    borderWidth: 3,
+    borderColor: "#007AFF",
+  },
+  patternLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#333",
   },
   textInputRow: {
     flexDirection: "row",
     gap: 10,
+    marginBottom: 10,
   },
   input: {
     flex: 1,
     height: 44,
-    backgroundColor: "#F0F0F0",
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
   },
   addBtn: {
     backgroundColor: "#007AFF",
     paddingHorizontal: 18,
     justifyContent: "center",
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  addBtnText: { color: "#FFF", fontWeight: "bold" },
-  stickerThumb: { width: 44, height: 44, borderRadius: 8 },
-  patternBox: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: "#EFEFEF",
-    borderRadius: 8,
+  addBtnText: {
+    color: "#FFF",
+    fontWeight: "bold",
   },
-  patternLabel: { fontSize: 13, fontWeight: "600" },
-  colorDot: { width: 32, height: 32, borderRadius: 16 },
-  selectedBorder: { borderWidth: 3, borderColor: "#007AFF" },
+  stickerCard: {
+    width: 70,
+    height: 70,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  stickerThumb: {
+    width: 50,
+    height: 50,
+    resizeMode: "contain",
+  },
   deleteBtn: {
     backgroundColor: "#FF3B30",
     padding: 10,
     borderRadius: 10,
     alignItems: "center",
-    marginBottom: 10,
+    marginTop: 5,
   },
-  deleteBtnText: { color: "#FFF", fontWeight: "bold" },
-  saveBtn: {
-    backgroundColor: "#FF3386",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 15,
+  deleteBtnText: {
+    color: "#FFF",
+    fontWeight: "bold",
   },
-  saveBtnText: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
 });
