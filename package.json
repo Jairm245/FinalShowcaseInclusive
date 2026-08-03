@@ -16,7 +16,7 @@
     "@react-navigation/stack": "^7.10.15",
     "@rn-vui/base": "^5.1.10",
     "@rn-vui/themed": "^5.1.10",
-    "@supabase/supabase-js": "^2.45.4",
+    "@supabase/supabase-js": "^2.111.0",
     "expo": "~54.0.36",
     "expo-camera": "~17.0.8",
     "expo-location": "~19.0.8",
