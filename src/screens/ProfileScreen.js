@@ -21,13 +21,14 @@ const handleSignOut = async () => {
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { user } = useAuthentication();
-  const [astrology, setAstrology] = useState("Pisces");
-  const userSign = findAstrologySign();
+  //const [astrology, setAstrology] = useState("Pisces");
+  //const userSign = findAstrologySign();
 
-  (useEffect(() => {
+  /*(useEffect(() => {
     setAstrology(userSign.sign);
   }),
     []);
+    */
 
   return (
     <View style={{ alignItems: "center" }}>
@@ -48,14 +49,9 @@ export default function ProfileScreen() {
             user.user_metadata.email.indexOf("@"), // gets part before @ of email address, should use profile username instead
           )}
       </Text>
-      <Button
-        onPress={() => {
-          navigation.navigate("Astrology");
-        }}
-        title={astrology}
-        color="#841584"
-        accessibilityLabel="Learn more about this purple button"
-      />
+    
+    
+      
       <Button onPress={handleSignOut} title="Log Out" />
       <Pressable>
         <Button
