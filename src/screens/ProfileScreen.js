@@ -16,7 +16,6 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
-// ✅ Fix 1: Use a relative path to import your local image asset
 import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
 
 const handleSignOut = async () => {
@@ -118,32 +117,26 @@ export default function ProfileScreen() {
     user?.user_metadata?.pronouns || ""
   );
 
-  const [pronounModalVisible, setPronounModalVisible] =
-    useState(false);
+  const [pronounModalVisible, setPronounModalVisible] = useState(false);
+  const [loadingPronouns, setLoadingPronouns] = useState(false);
+  const [savingPronouns, setSavingPronouns] = useState(false);
 
-  const [loadingPronouns, setLoadingPronouns] =
-    useState(false);
-
-  const [savingPronouns, setSavingPronouns] =
-    useState(false);
-
-  const email =
-    user?.user_metadata?.email ||
-    user?.email ||
-    "";
+  const email = user?.user_metadata?.email || user?.email || "";
 
   const username =
     user?.user_metadata?.username ||
     (email.includes("@") ? email.split("@")[0] : email) ||
-    "Username";
+    "username";
+
+  const displayName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.display_name ||
+    "Ryan Aguilar";
 
   const profileInitial =
-    username.length > 0
-      ? username.charAt(0).toUpperCase()
-      : "U";
+    username.length > 0 ? username.charAt(0).toUpperCase() : "U";
 
-  const profileColor =
-    route.params?.backgroundColor || "#32C759";
+  const profileColor = route.params?.backgroundColor || "#9AA0A6";
 
   const getPronouns = async () => {
     try {
@@ -155,22 +148,13 @@ export default function ProfileScreen() {
         .order("id", { ascending: true });
 
       if (error) {
-        console.error(
-          "Error fetching pronouns:",
-          error.message
-        );
-
+        console.error("Error fetching pronouns:", error.message);
         return;
       }
 
-      console.log("Pronouns returned:", data);
-
       setPronouns(data || []);
     } catch (error) {
-      console.error(
-        "Unexpected error fetching pronouns:",
-        error.message
-      );
+      console.error("Unexpected error fetching pronouns:", error.message);
     } finally {
       setLoadingPronouns(false);
     }
@@ -180,30 +164,16 @@ export default function ProfileScreen() {
     try {
       setSavingPronouns(true);
 
-      const { data, error } =
-        await supabase.auth.updateUser({
-          data: {
-            pronouns: pronounValue,
-          },
-        });
+      const { data, error } = await supabase.auth.updateUser({
+        data: { pronouns: pronounValue },
+      });
 
-      if (error) {
-        throw error;
-      }
-
-      console.log(
-        "Updated user pronouns:",
-        data.user?.user_metadata?.pronouns
-      );
+      if (error) throw error;
 
       setSelectedPronouns(pronounValue);
       setPronounModalVisible(false);
     } catch (error) {
-      console.error(
-        "Error saving pronouns:",
-        error.message
-      );
-
+      console.error("Error saving pronouns:", error.message);
       Alert.alert(
         "Unable to save pronouns",
         "Please check your connection and try again."
@@ -218,29 +188,20 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    setSelectedPronouns(
-      user?.user_metadata?.pronouns || ""
-    );
+    setSelectedPronouns(user?.user_metadata?.pronouns || "");
   }, [user?.user_metadata?.pronouns]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#101010"
-      />
+      <StatusBar barStyle="light-content" backgroundColor="#8E9399" />
 
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.profileHeader,
-            { backgroundColor: profileColor },
-          ]}
-        >
+        {/* Header Hero Area */}
+        <View style={[styles.profileHeader, { backgroundColor: profileColor }]}>
           <View style={styles.navigationHeader}>
             <Pressable
               style={styles.circleHeaderButton}
@@ -249,83 +210,96 @@ export default function ProfileScreen() {
               <Text style={styles.backIcon}>‹</Text>
             </Pressable>
 
-            <Text style={styles.headerUsername}>
-              {username}
-            </Text>
-
             <View style={styles.headerActions}>
               <Pressable
                 style={styles.circleHeaderButton}
-                onPress={() =>
-                  navigation.navigate("BackgroundBuild")
-                }
+                onPress={() => navigation.navigate("BackgroundBuild")}
               >
-                <Text style={styles.headerButtonIcon}>
-                  ◐
-                </Text>
+                <Text style={styles.headerButtonIcon}>↑</Text>
               </Pressable>
 
               <Pressable
                 style={styles.circleHeaderButton}
-                onPress={() =>
-                  navigation.navigate("Settings")
-                }
+                onPress={() => navigation.navigate("Settings")}
               >
-                <Text style={styles.headerButtonIcon}>
-                  ⚙
-                </Text>
+                <Text style={styles.headerButtonIcon}>⚙</Text>
               </Pressable>
             </View>
           </View>
 
-          <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarInitial}>
-              {profileInitial}
-            </Text>
+          {/* Central Bitmoji Space - Loaded from imported image asset */}
+          <View style={styles.avatarSpaceContainer}>
+            <Image
+              source={leaningAvatar} // ✅ Fix 2: Directly pass the imported image variable
+              style={styles.avatarBitmoji}
+              resizeMode="contain"
+            />
           </View>
 
-          <Text style={styles.displayName}>
-            {username}
-          </Text>
+          {/* Bottom Overlay Row (Snapcode, Name/Handle, Heart Action) */}
+          <View style={styles.headerBottomRow}>
+            {/* Snapcode / Badge */}
+            <View style={styles.snapcodeContainer}>
+              <View style={styles.snapcodeBorder}>
+                <View style={styles.snapcodeInnerIcon}>
+                  <Text style={styles.snapcodeInitial}>{profileInitial}</Text>
+                </View>
+              </View>
+            </View>
 
-          <Text style={styles.profileEmail}>
-            {email || "No email available"}
-          </Text>
+            {/* Name and Handle */}
+            <View style={styles.nameContainer}>
+              <Text style={styles.displayName}>{displayName}</Text>
+              <Text style={styles.usernameHandle}>{username}</Text>
+            </View>
 
-          <View style={styles.profileButtonRow}>
-            <Pressable style={styles.mainProfileButton}>
-              <Text style={styles.mainProfileButtonText}>
-                My Account
-              </Text>
-            </Pressable>
-
+            {/* Customize Heart Button */}
             <Pressable
-              style={styles.mainProfileButton}
-              onPress={() =>
-                navigation.navigate("BackgroundBuild")
-              }
+              style={styles.heartButton}
+              onPress={() => navigation.navigate("CustomizationScreen")}
             >
-              <Text style={styles.mainProfileButtonText}>
-                Change Background
-              </Text>
+              <Text style={styles.heartIcon}>💛</Text>
             </Pressable>
           </View>
         </View>
 
+        {/* Main Body */}
         <View style={styles.body}>
-          <View style={styles.infoRow}>
-            <InfoPill
-              icon="@"
-              text={selectedPronouns || "Add pronouns"}
-              onPress={() =>
-                setPronounModalVisible(true)
-              }
-            />
+          {/* Main Action Buttons */}
+          <View style={styles.profileButtonRow}>
+            <Pressable style={styles.mainProfileButton}>
+              <Text style={styles.mainProfileButtonText}>My Account</Text>
+            </Pressable>
 
-            <InfoPill icon="•" text="Mar 10" />
-            <InfoPill icon="★" text="1,188" />
-            <InfoPill icon="♓" text="Pisces" />
+            <Pressable style={styles.mainProfileButton}>
+              <Text style={styles.mainProfileButtonText}>Public Profile</Text>
+            </Pressable>
           </View>
+
+          {/* Horizontal Info Pills Row */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.infoRow}
+          >
+            <InfoPill
+              icon=""
+              text={selectedPronouns || "+ Add pronouns"}
+              showArrow={true}
+              onPress={() => setPronounModalVisible(true)}
+            />
+            <InfoPill icon="🎂" text="Mar 20" />
+            <InfoPill icon="👻" text="1,936" />
+            <InfoPill icon="♓" text="Pisces" showArrow={true} />
+          </ScrollView>
+
+          {/* Feature Cards */}
+          <ProfileCard
+            icon="https://link.snapchat.com/plus/plus.png"
+            title="Snapchat+"
+            description="Exclusive Early Access to lens, Bitmoji, etc..."
+            onPress={() => navigation.navigate("BackgroundBuild")}
+          />
 
           <ProfileCard
             icon="https://link.snapchat.com/plus/plus.png"
@@ -338,9 +312,14 @@ export default function ProfileScreen() {
             icon="+"
             title="Profile Features"
             description="Customize and explore your profile."
-            onPress={() =>
-              navigation.navigate("BackgroundBuild")
-            }
+            onPress={() => navigation.navigate("BackgroundBuild")}
+          />
+
+          <ProfileCard
+            icon="♥"
+            title="Customize hearts"
+            description="Express yourself"
+            onPress={() => navigation.navigate("CustomizationScreen")}
           />
 
           <SectionTitle>Friends</SectionTitle>
@@ -369,26 +348,17 @@ export default function ProfileScreen() {
 
           <View style={styles.mapCard}>
             <View style={styles.mapPlaceholder}>
-              <Text style={styles.mapPlaceholderText}>
-                MAP PREVIEW
-              </Text>
+              <Text style={styles.mapPlaceholderText}>MAP PREVIEW</Text>
             </View>
 
             <View style={styles.mapInformation}>
               <View style={styles.mapIcon}>
-                <Text style={styles.mapIconText}>
-                  ○
-                </Text>
+                <Text style={styles.mapIconText}>○</Text>
               </View>
 
               <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>
-                  Not Sharing Location
-                </Text>
-
-                <Text style={styles.cardDescription}>
-                  Ghost Mode
-                </Text>
+                <Text style={styles.cardTitle}>Not Sharing Location</Text>
+                <Text style={styles.cardDescription}>Ghost Mode</Text>
               </View>
 
               <Text style={styles.arrow}>›</Text>
@@ -403,108 +373,39 @@ export default function ProfileScreen() {
             description="Invite friends or use it privately."
           />
 
-          <SectionTitle>
-            My Favorites & Reposts
-          </SectionTitle>
-
-          <View style={styles.largePlaceholderCard}>
-            <View style={styles.smallPostPlaceholder}>
-              <Text style={styles.placeholderText}>
-                POST
-              </Text>
-            </View>
-          </View>
-
-          <SectionTitle>My Selfie</SectionTitle>
-
-          <View style={styles.selfieCard}>
-            <View style={styles.selfiePlaceholder}>
-              <View style={styles.placeholderPerson}>
-                <Text style={styles.placeholderPersonText}>
-                  1
-                </Text>
-              </View>
-
-              <View style={styles.placeholderPerson}>
-                <Text style={styles.placeholderPersonText}>
-                  2
-                </Text>
-              </View>
-
-              <View style={styles.placeholderPerson}>
-                <Text style={styles.placeholderPersonText}>
-                  3
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.selfieInformation}>
-              <View style={styles.selfieIcon}>
-                <Text style={styles.selfieIconText}>
-                  ☺
-                </Text>
-              </View>
-
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>
-                  Create My Selfie
-                </Text>
-
-                <Text style={styles.cardDescription}>
-                  Create a personalized profile selfie.
-                </Text>
-              </View>
-            </View>
-          </View>
-
           <SectionTitle>Account</SectionTitle>
 
           <ProfileCard
             icon="⚙"
             title="Settings"
             description="Manage your profile and account."
-            onPress={() =>
-              navigation.navigate("Settings")
-            }
+            onPress={() => navigation.navigate("Settings")}
           />
 
-          <Pressable
-            style={styles.logOutButton}
-            onPress={handleSignOut}
-          >
-            <Text style={styles.logOutButtonText}>
-              Log Out
-            </Text>
+          <Pressable style={styles.logOutButton} onPress={handleSignOut}>
+            <Text style={styles.logOutButtonText}>Log Out</Text>
           </Pressable>
 
           <View style={styles.footer}>
             <View style={styles.footerGhost}>
-              <Text style={styles.footerGhostText}>
-                U
-              </Text>
+              <Text style={styles.footerGhostText}>U</Text>
             </View>
-
-            <Text style={styles.footerText}>
-              Member profile
-            </Text>
+            <Text style={styles.footerText}>Member profile</Text>
           </View>
         </View>
       </ScrollView>
 
+      {/* Pronoun Selection Modal */}
       <Modal
         animationType="slide"
         transparent
         visible={pronounModalVisible}
-        onRequestClose={() =>
-          setPronounModalVisible(false)
-        }
+        onRequestClose={() => setPronounModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() =>
-              setPronounModalVisible(false)
-            }
+            onPress={() => setPronounModalVisible(false)}
           />
 
           <View style={styles.pronounSheet}>
@@ -512,96 +413,63 @@ export default function ProfileScreen() {
 
             <View style={styles.pronounSheetHeader}>
               <View style={styles.pronounHeaderText}>
-                <Text style={styles.pronounSheetTitle}>
-                  Select your pronouns
-                </Text>
-
-                <Text
-                  style={styles.pronounSheetDescription}
-                >
-                  Your selection will appear as the first
-                  profile tag.
+                <Text style={styles.pronounSheetTitle}>Select your pronouns</Text>
+                <Text style={styles.pronounSheetDescription}>
+                  Your selection will appear as the first profile tag.
                 </Text>
               </View>
 
               <Pressable
                 style={styles.closePronounButton}
-                onPress={() =>
-                  setPronounModalVisible(false)
-                }
+                onPress={() => setPronounModalVisible(false)}
               >
-                <Text
-                  style={styles.closePronounButtonText}
-                >
-                  ×
-                </Text>
+                <Text style={styles.closePronounButtonText}>×</Text>
               </Pressable>
             </View>
 
             <ScrollView
               style={styles.pronounOptionsScroll}
-              contentContainerStyle={
-                styles.pronounOptionsContent
-              }
+              contentContainerStyle={styles.pronounOptionsContent}
               showsVerticalScrollIndicator={false}
             >
               {loadingPronouns ? (
-                <Text style={styles.statusText}>
-                  Loading pronouns...
-                </Text>
+                <Text style={styles.statusText}>Loading pronouns...</Text>
               ) : pronouns.length === 0 ? (
                 <View style={styles.emptyPronounsContainer}>
                   <Text style={styles.statusText}>
                     No pronouns are currently available.
                   </Text>
-
-                  <Pressable
-                    style={styles.retryButton}
-                    onPress={getPronouns}
-                  >
-                    <Text style={styles.retryButtonText}>
-                      Try Again
-                    </Text>
+                  <Pressable style={styles.retryButton} onPress={getPronouns}>
+                    <Text style={styles.retryButtonText}>Try Again</Text>
                   </Pressable>
                 </View>
               ) : (
                 pronouns.map((item) => {
                   const option = item.pronouns;
-
-                  const isSelected =
-                    selectedPronouns === option;
+                  const isSelected = selectedPronouns === option;
 
                   return (
                     <Pressable
                       key={item.id}
                       style={({ pressed }) => [
                         styles.pronounOption,
-                        isSelected &&
-                          styles.selectedPronounOption,
-                        pressed &&
-                          styles.pronounOptionPressed,
+                        isSelected && styles.selectedPronounOption,
+                        pressed && styles.pronounOptionPressed,
                       ]}
-                      onPress={() =>
-                        savePronouns(option)
-                      }
+                      onPress={() => savePronouns(option)}
                       disabled={savingPronouns}
                     >
                       <Text
                         style={[
                           styles.pronounOptionText,
-                          isSelected &&
-                            styles.selectedPronounOptionText,
+                          isSelected && styles.selectedPronounOptionText,
                         ]}
                       >
                         {option}
                       </Text>
 
                       {isSelected ? (
-                        <Text
-                          style={styles.pronounCheckmark}
-                        >
-                          ✓
-                        </Text>
+                        <Text style={styles.pronounCheckmark}>✓</Text>
                       ) : null}
                     </Pressable>
                   );
@@ -611,19 +479,15 @@ export default function ProfileScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.removePronounsButton,
-                  pressed &&
-                    styles.pronounOptionPressed,
+                  pressed && styles.pronounOptionPressed,
                 ]}
                 onPress={() => savePronouns("")}
-                disabled={
-                  savingPronouns || !selectedPronouns
-                }
+                disabled={savingPronouns || !selectedPronouns}
               >
                 <Text
                   style={[
                     styles.removePronounsButtonText,
-                    !selectedPronouns &&
-                      styles.disabledRemovePronounsText,
+                    !selectedPronouns && styles.disabledRemovePronounsText,
                   ]}
                 >
                   Remove pronouns
@@ -631,9 +495,7 @@ export default function ProfileScreen() {
               </Pressable>
 
               {savingPronouns ? (
-                <Text style={styles.savingPronounsText}>
-                  Saving...
-                </Text>
+                <Text style={styles.savingPronounsText}>Saving...</Text>
               ) : null}
             </ScrollView>
           </View>
