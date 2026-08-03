@@ -31,11 +31,12 @@ export default function AstrologyScreen() {
   const userSign = findAstrologySign();
   const [imageUrl, setImageUrl] = useState("");
 
-  (useEffect(() => {
+ /* (useEffect(() => {
     setAstrology(userSign.sign);
     setImageUrl(zodiacImages[userSign.sign]);
   }),
     []);
+    */
 
   (useEffect(() => {
     if (astrology === null) return;
