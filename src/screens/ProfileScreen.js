@@ -9,13 +9,15 @@ import {
   StyleSheet,
   Text,
   View,
+  ActivityIndicator,
 } from "react-native";
 
-import { useEffect, useState, useCallback } from "react";
-import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import { useEffect, useState } from "react";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
+// Local image import
 import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
 
 const handleSignOut = async () => {
@@ -41,7 +43,6 @@ function ProfileCard({
   showArrow = true,
   onPress,
 }) {
-  // Check if icon is a remote URL string
   const isImageIcon =
     typeof icon === "string" &&
     (icon.trim().startsWith("http://") || icon.trim().startsWith("https://"));
@@ -112,15 +113,6 @@ export default function ProfileScreen() {
   const route = useRoute();
   const { user } = useAuthentication();
 
-  // Support viewing own profile OR another user's profile
-  const targetUserId = route.params?.userId || user?.id;
-  const isOwnProfile = !route.params?.userId || route.params?.userId === user?.id;
-
-  // Public Profile State from database
-  const [profileData, setProfileData] = useState(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-
-  // Pronoun Modal States
   const [pronouns, setPronouns] = useState([]);
   const [selectedPronouns, setSelectedPronouns] = useState(
     user?.user_metadata?.pronouns || ""
@@ -130,17 +122,22 @@ export default function ProfileScreen() {
   const [loadingPronouns, setLoadingPronouns] = useState(false);
   const [savingPronouns, setSavingPronouns] = useState(false);
 
-  // User identifiers with database fallback
+  // --- Heart Accessibility Modal State ---
+  const [heartModalVisible, setHeartModalVisible] = useState(false);
+  const [heartVisibility, setHeartVisibility] = useState("everyone"); // 'everyone' | 'friends' | 'selected'
+  const [friendsList, setFriendsList] = useState([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState([]);
+  const [loadingHeartData, setLoadingHeartData] = useState(false);
+  const [savingHeartData, setSavingHeartData] = useState(false);
+
   const email = user?.user_metadata?.email || user?.email || "";
 
   const username =
-    profileData?.username ||
     user?.user_metadata?.username ||
     (email.includes("@") ? email.split("@")[0] : email) ||
     "username";
 
   const displayName =
-    profileData?.display_name ||
     user?.user_metadata?.full_name ||
     user?.user_metadata?.display_name ||
     "Ryan Aguilar";
@@ -149,43 +146,6 @@ export default function ProfileScreen() {
     username.length > 0 ? username.charAt(0).toUpperCase() : "U";
 
   const profileColor = route.params?.backgroundColor || "#9AA0A6";
-
-  // Determine Custom Heart Image URL (from Profiles Table -> User Auth Metadata -> Fallback Null)
-  const customHeartUrl =
-    profileData?.custom_heart_url || user?.user_metadata?.custom_heart_url || null;
-
-  // Fetch Public Profile from database
-  const fetchProfile = async () => {
-    if (!targetUserId) return;
-    try {
-      setLoadingProfile(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", targetUserId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error fetching public profile:", error.message);
-      } else if (data) {
-        setProfileData(data);
-        if (data.pronouns) {
-          setSelectedPronouns(data.pronouns);
-        }
-      }
-    } catch (error) {
-      console.error("Unexpected error fetching profile:", error);
-    } finally {
-      setLoadingProfile(false);
-    }
-  };
-
-  // Re-fetch profile automatically every time user returns to this screen
-  useFocusEffect(
-    useCallback(() => {
-      fetchProfile();
-    }, [targetUserId])
-  );
 
   const getPronouns = async () => {
     try {
@@ -213,20 +173,11 @@ export default function ProfileScreen() {
     try {
       setSavingPronouns(true);
 
-      // 1. Update Auth Metadata
-      const { error: authError } = await supabase.auth.updateUser({
+      const { data, error } = await supabase.auth.updateUser({
         data: { pronouns: pronounValue },
       });
-      if (authError) throw authError;
 
-      // 2. Sync to public profiles table
-      if (user?.id) {
-        await supabase.from("profiles").upsert({
-          id: user.id,
-          pronouns: pronounValue,
-          updated_at: new Date(),
-        });
-      }
+      if (error) throw error;
 
       setSelectedPronouns(pronounValue);
       setPronounModalVisible(false);
@@ -241,15 +192,96 @@ export default function ProfileScreen() {
     }
   };
 
+  // --- Fetch Heart Privacy Settings & Friends List ---
+  const loadHeartAccessibilityData = async () => {
+    if (!user) return;
+    try {
+      setLoadingHeartData(true);
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("friend_ids, heart_visibility, heart_allowed_friend_ids")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Error fetching profile settings:", profileError.message);
+      }
+
+      if (profile) {
+        setHeartVisibility(profile.heart_visibility || "everyone");
+        setSelectedFriendIds(profile.heart_allowed_friend_ids || []);
+
+        const friendIds = profile.friend_ids || [];
+
+        if (friendIds.length > 0) {
+          const { data: friendsData, error: friendsError } = await supabase
+            .from("profiles")
+            .select("id, username, full_name")
+            .in("id", friendIds);
+
+          if (friendsError) {
+            console.error("Error fetching friends list:", friendsError.message);
+          } else {
+            setFriendsList(friendsData || []);
+          }
+        } else {
+          setFriendsList([]);
+        }
+      }
+    } catch (error) {
+      console.error("Unexpected error loading heart settings:", error.message);
+    } finally {
+      setLoadingHeartData(false);
+    }
+  };
+
+  const toggleFriendSelection = (friendId) => {
+    if (selectedFriendIds.includes(friendId)) {
+      setSelectedFriendIds(selectedFriendIds.filter((id) => id !== friendId));
+    } else {
+      setSelectedFriendIds([...selectedFriendIds, friendId]);
+    }
+  };
+
+  const saveHeartAccessibilitySettings = async () => {
+    try {
+      setSavingHeartData(true);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          heart_visibility: heartVisibility,
+          heart_allowed_friend_ids:
+            heartVisibility === "selected" ? selectedFriendIds : [],
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      Alert.alert("Success", "Heart privacy settings updated!");
+      setHeartModalVisible(false);
+    } catch (error) {
+      console.error("Error saving heart settings:", error.message);
+      Alert.alert("Unable to save settings", "Please try again.");
+    } finally {
+      setSavingHeartData(false);
+    }
+  };
+
   useEffect(() => {
     getPronouns();
   }, []);
 
   useEffect(() => {
-    if (user?.user_metadata?.pronouns && !profileData?.pronouns) {
-      setSelectedPronouns(user.user_metadata.pronouns);
-    }
+    setSelectedPronouns(user?.user_metadata?.pronouns || "");
   }, [user?.user_metadata?.pronouns]);
+
+  useEffect(() => {
+    if (heartModalVisible) {
+      loadHeartAccessibilityData();
+    }
+  }, [heartModalVisible]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -270,23 +302,21 @@ export default function ProfileScreen() {
               <Text style={styles.backIcon}>‹</Text>
             </Pressable>
 
-            {isOwnProfile && (
-              <View style={styles.headerActions}>
-                <Pressable
-                  style={styles.circleHeaderButton}
-                  onPress={() => navigation.navigate("BackgroundBuild")}
-                >
-                  <Text style={styles.headerButtonIcon}>↑</Text>
-                </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                style={styles.circleHeaderButton}
+                onPress={() => navigation.navigate("BackgroundBuild")}
+              >
+                <Text style={styles.headerButtonIcon}>↑</Text>
+              </Pressable>
 
-                <Pressable
-                  style={styles.circleHeaderButton}
-                  onPress={() => navigation.navigate("Settings")}
-                >
-                  <Text style={styles.headerButtonIcon}>⚙</Text>
-                </Pressable>
-              </View>
-            )}
+              <Pressable
+                style={styles.circleHeaderButton}
+                onPress={() => navigation.navigate("Settings")}
+              >
+                <Text style={styles.headerButtonIcon}>⚙</Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* Central Bitmoji Space */}
@@ -298,9 +328,8 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {/* Bottom Overlay Row (Snapcode, Name/Handle, Custom Heart) */}
+          {/* Bottom Overlay Row (Snapcode, Name/Handle, Heart Action) */}
           <View style={styles.headerBottomRow}>
-            {/* Snapcode / Badge */}
             <View style={styles.snapcodeContainer}>
               <View style={styles.snapcodeBorder}>
                 <View style={styles.snapcodeInnerIcon}>
@@ -309,36 +338,22 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Name and Handle */}
             <View style={styles.nameContainer}>
               <Text style={styles.displayName}>{displayName}</Text>
               <Text style={styles.usernameHandle}>{username}</Text>
             </View>
 
-            {/* Customize Heart Button */}
             <Pressable
               style={styles.heartButton}
-              onPress={() => {
-                if (isOwnProfile) {
-                  navigation.navigate("CustomizationScreen");
-                }
-              }}
+              onPress={() => setHeartModalVisible(true)}
             >
-              {customHeartUrl ? (
-                <Image
-                  source={{ uri: customHeartUrl }}
-                  style={styles.customHeartImage}
-                />
-              ) : (
-                <Text style={styles.heartIcon}>💛</Text>
-              )}
+              <Text style={styles.heartIcon}>💛</Text>
             </Pressable>
           </View>
         </View>
 
         {/* Main Body */}
         <View style={styles.body}>
-          {/* Main Action Buttons */}
           <View style={styles.profileButtonRow}>
             <Pressable style={styles.mainProfileButton}>
               <Text style={styles.mainProfileButtonText}>My Account</Text>
@@ -357,9 +372,9 @@ export default function ProfileScreen() {
           >
             <InfoPill
               icon=""
-              text={selectedPronouns || (isOwnProfile ? "+ Add pronouns" : "No pronouns")}
-              showArrow={isOwnProfile}
-              onPress={isOwnProfile ? () => setPronounModalVisible(true) : null}
+              text={selectedPronouns || "+ Add pronouns"}
+              showArrow={true}
+              onPress={() => setPronounModalVisible(true)}
             />
             <InfoPill icon="🎂" text="Mar 20" />
             <InfoPill icon="👻" text="1,936" />
@@ -376,26 +391,18 @@ export default function ProfileScreen() {
 
           <ProfileCard
             icon="+"
-            title="Manage Heart Accessiblity"
-            description="Manage "
-            onPress={() => navigation.navigate("BackgroundBuild")}
-          />
-
-          <ProfileCard
-            icon="+"
             title="Profile Features"
             description="Customize and explore your profile."
             onPress={() => navigation.navigate("BackgroundBuild")}
           />
 
-          {isOwnProfile && (
-            <ProfileCard
-              icon="♥"
-              title="Customize hearts"
-              description="Express yourself"
-              onPress={() => navigation.navigate("CustomizationScreen")}
-            />
-          )}
+          {/* Opens Heart Accessibility Modal */}
+          <ProfileCard
+            icon="♥"
+            title="Customize hearts"
+            description="Manage heart accessibility & visibility"
+            onPress={() => setHeartModalVisible(true)}
+          />
 
           <SectionTitle>Friends</SectionTitle>
 
@@ -448,22 +455,18 @@ export default function ProfileScreen() {
             description="Invite friends or use it privately."
           />
 
-          {isOwnProfile && (
-            <>
-              <SectionTitle>Account</SectionTitle>
+          <SectionTitle>Account</SectionTitle>
 
-              <ProfileCard
-                icon="⚙"
-                title="Settings"
-                description="Manage your profile and account."
-                onPress={() => navigation.navigate("Settings")}
-              />
+          <ProfileCard
+            icon="⚙"
+            title="Settings"
+            description="Manage your profile and account."
+            onPress={() => navigation.navigate("Settings")}
+          />
 
-              <Pressable style={styles.logOutButton} onPress={handleSignOut}>
-                <Text style={styles.logOutButtonText}>Log Out</Text>
-              </Pressable>
-            </>
-          )}
+          <Pressable style={styles.logOutButton} onPress={handleSignOut}>
+            <Text style={styles.logOutButtonText}>Log Out</Text>
+          </Pressable>
 
           <View style={styles.footer}>
             <View style={styles.footerGhost}>
@@ -474,7 +477,161 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Pronoun Selection Modal */}
+      {/* --- Heart Accessibility Modal --- */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={heartModalVisible}
+        onRequestClose={() => setHeartModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setHeartModalVisible(false)}
+          />
+
+          <View style={styles.heartSheet}>
+            <View style={styles.sheetHandle} />
+
+            <Text style={styles.heartSheetTitle}>Who can see my hearts?</Text>
+            <Text style={styles.heartSheetDescription}>
+              Select who is allowed to view your customized heart badges.
+            </Text>
+
+            {loadingHeartData ? (
+              <ActivityIndicator
+                size="large"
+                color="#007AFF"
+                style={{ marginVertical: 30 }}
+              />
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 10 }}
+              >
+                {/* Everyone */}
+                <Pressable
+                  style={[
+                    styles.accessOptionCard,
+                    heartVisibility === "everyone" && styles.selectedAccessOption,
+                  ]}
+                  onPress={() => setHeartVisibility("everyone")}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accessOptionTitle}>Everyone</Text>
+                    <Text style={styles.accessOptionDescription}>
+                      Anyone viewing your profile can see your hearts.
+                    </Text>
+                  </View>
+                  <Text style={styles.radioText}>
+                    {heartVisibility === "everyone" ? "🔘" : "⚪"}
+                  </Text>
+                </Pressable>
+
+                {/* Friends Only */}
+                <Pressable
+                  style={[
+                    styles.accessOptionCard,
+                    heartVisibility === "friends" && styles.selectedAccessOption,
+                  ]}
+                  onPress={() => setHeartVisibility("friends")}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accessOptionTitle}>My Friends</Text>
+                    <Text style={styles.accessOptionDescription}>
+                      Only your added friends can see your hearts.
+                    </Text>
+                  </View>
+                  <Text style={styles.radioText}>
+                    {heartVisibility === "friends" ? "🔘" : "⚪"}
+                  </Text>
+                </Pressable>
+
+                {/* Selected Few */}
+                <Pressable
+                  style={[
+                    styles.accessOptionCard,
+                    heartVisibility === "selected" && styles.selectedAccessOption,
+                  ]}
+                  onPress={() => setHeartVisibility("selected")}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accessOptionTitle}>Selected Friends Only</Text>
+                    <Text style={styles.accessOptionDescription}>
+                      Pick specific friends who are allowed access.
+                    </Text>
+                  </View>
+                  <Text style={styles.radioText}>
+                    {heartVisibility === "selected" ? "🔘" : "⚪"}
+                  </Text>
+                </Pressable>
+
+                {/* Friend Selector Multi-Choice List */}
+                {heartVisibility === "selected" && (
+                  <View style={styles.friendPickerSection}>
+                    <Text style={styles.friendPickerHeader}>
+                      Select Allowed Friends
+                    </Text>
+
+                    {friendsList.length === 0 ? (
+                      <Text style={styles.emptyFriendsText}>
+                        You have no friends added yet.
+                      </Text>
+                    ) : (
+                      friendsList.map((friend) => {
+                        const isChecked = selectedFriendIds.includes(friend.id);
+                        return (
+                          <Pressable
+                            key={friend.id}
+                            style={styles.friendSelectionRow}
+                            onPress={() => toggleFriendSelection(friend.id)}
+                          >
+                            <Text style={styles.friendSelectionName}>
+                              {friend.full_name || friend.username}
+                            </Text>
+
+                            <View
+                              style={[
+                                styles.checkboxBase,
+                                isChecked && styles.checkboxChecked,
+                              ]}
+                            >
+                              {isChecked && (
+                                <Text style={styles.checkboxCheckmark}>✓</Text>
+                              )}
+                            </View>
+                          </Pressable>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+              </ScrollView>
+            )}
+
+            <View style={styles.modalButtonRow}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => setHeartModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modalSaveButton}
+                onPress={saveHeartAccessibilitySettings}
+                disabled={savingHeartData}
+              >
+                <Text style={styles.modalSaveText}>
+                  {savingHeartData ? "Saving..." : "Done"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- Pronoun Selection Modal --- */}
       <Modal
         animationType="slide"
         transparent
@@ -488,7 +645,7 @@ export default function ProfileScreen() {
           />
 
           <View style={styles.pronounSheet}>
-            <View style={styles.pronounSheetHandle} />
+            <View style={styles.sheetHandle} />
 
             <View style={styles.pronounSheetHeader}>
               <View style={styles.pronounHeaderText}>
@@ -703,16 +860,9 @@ const styles = StyleSheet.create({
   },
   heartButton: {
     padding: 4,
-    justifyContent: "center",
-    alignItems: "center",
   },
   heartIcon: {
     fontSize: 48,
-  },
-  customHeartImage: {
-    width: 52,
-    height: 52,
-    resizeMode: "contain",
   },
 
   /* Body Content */
@@ -921,12 +1071,155 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  /* Modal Sheet */
+  /* Common Modal Elements */
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
+  sheetHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#C7C7CC",
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+
+  /* Heart Accessibility Sheet Styles */
+  heartSheet: {
+    maxHeight: "82%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+  },
+  heartSheetTitle: {
+    color: "#000000",
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  heartSheetDescription: {
+    color: "#8E8E93",
+    fontSize: 14,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  accessOptionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F2F2F7",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  selectedAccessOption: {
+    borderColor: "#007AFF",
+    backgroundColor: "#E5F1FF",
+  },
+  accessOptionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000000",
+  },
+  accessOptionDescription: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginTop: 2,
+  },
+  radioText: {
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  friendPickerSection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderColor: "#E5E5EA",
+  },
+  friendPickerHeader: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 10,
+  },
+  emptyFriendsText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    fontStyle: "italic",
+    paddingVertical: 10,
+  },
+  friendSelectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderColor: "#F2F2F7",
+  },
+  friendSelectionName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1C1C1E",
+  },
+  checkboxBase: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#C7C7CC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  checkboxCheckmark: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    marginTop: 15,
+  },
+  modalCancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#F2F2F7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#8E8E93",
+  },
+  modalSaveButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#007AFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  modalSaveText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+
+  /* Pronoun Modal Sheet Styles */
   pronounSheet: {
     maxHeight: "72%",
     borderTopLeftRadius: 24,
@@ -935,14 +1228,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingHorizontal: 18,
     paddingBottom: 24,
-  },
-  pronounSheetHandle: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#C7C7CC",
-    alignSelf: "center",
-    marginBottom: 16,
   },
   pronounSheetHeader: {
     flexDirection: "row",
