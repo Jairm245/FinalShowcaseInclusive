@@ -16,7 +16,7 @@
     "@react-navigation/stack": "^7.10.15",
     "@rn-vui/base": "^5.1.10",
     "@rn-vui/themed": "^5.1.10",
-    "@supabase/supabase-js": "^2.45.4",
+    "@supabase/supabase-js": "^2.111.0",
     "expo": "~54.0.36",
     "expo-camera": "~17.0.8",
     "expo-location": "~19.0.8",
@@ -34,6 +34,7 @@
     "react-native-svg": "15.11.2",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-view-shot": "4.0.3",
     "react-native-worklets": "^0.5.1"
   },
   "devDependencies": {

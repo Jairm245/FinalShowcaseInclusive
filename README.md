@@ -46,6 +46,7 @@ const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
 ```bash
 npm install
 npm install expo
+npx expo install react-native-view-shot
 npx expo start
 @supabase/supabase-js
 tbd
