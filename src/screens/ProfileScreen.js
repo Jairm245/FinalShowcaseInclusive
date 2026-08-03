@@ -11,8 +11,8 @@ import {
   View,
 } from "react-native";
 
-import { useEffect, useState } from "react";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useEffect, useState, useCallback } from "react";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
@@ -112,6 +112,15 @@ export default function ProfileScreen() {
   const route = useRoute();
   const { user } = useAuthentication();
 
+  // Support viewing own profile OR another user's profile
+  const targetUserId = route.params?.userId || user?.id;
+  const isOwnProfile = !route.params?.userId || route.params?.userId === user?.id;
+
+  // Public Profile State from database
+  const [profileData, setProfileData] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Pronoun Modal States
   const [pronouns, setPronouns] = useState([]);
   const [selectedPronouns, setSelectedPronouns] = useState(
     user?.user_metadata?.pronouns || ""
@@ -121,14 +130,17 @@ export default function ProfileScreen() {
   const [loadingPronouns, setLoadingPronouns] = useState(false);
   const [savingPronouns, setSavingPronouns] = useState(false);
 
+  // User identifiers with database fallback
   const email = user?.user_metadata?.email || user?.email || "";
 
   const username =
+    profileData?.username ||
     user?.user_metadata?.username ||
     (email.includes("@") ? email.split("@")[0] : email) ||
     "username";
 
   const displayName =
+    profileData?.display_name ||
     user?.user_metadata?.full_name ||
     user?.user_metadata?.display_name ||
     "Ryan Aguilar";
@@ -137,6 +149,43 @@ export default function ProfileScreen() {
     username.length > 0 ? username.charAt(0).toUpperCase() : "U";
 
   const profileColor = route.params?.backgroundColor || "#9AA0A6";
+
+  // Determine Custom Heart Image URL (from Profiles Table -> User Auth Metadata -> Fallback Null)
+  const customHeartUrl =
+    profileData?.custom_heart_url || user?.user_metadata?.custom_heart_url || null;
+
+  // Fetch Public Profile from database
+  const fetchProfile = async () => {
+    if (!targetUserId) return;
+    try {
+      setLoadingProfile(true);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", targetUserId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching public profile:", error.message);
+      } else if (data) {
+        setProfileData(data);
+        if (data.pronouns) {
+          setSelectedPronouns(data.pronouns);
+        }
+      }
+    } catch (error) {
+      console.error("Unexpected error fetching profile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  // Re-fetch profile automatically every time user returns to this screen
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [targetUserId])
+  );
 
   const getPronouns = async () => {
     try {
@@ -164,11 +213,20 @@ export default function ProfileScreen() {
     try {
       setSavingPronouns(true);
 
-      const { data, error } = await supabase.auth.updateUser({
+      // 1. Update Auth Metadata
+      const { error: authError } = await supabase.auth.updateUser({
         data: { pronouns: pronounValue },
       });
+      if (authError) throw authError;
 
-      if (error) throw error;
+      // 2. Sync to public profiles table
+      if (user?.id) {
+        await supabase.from("profiles").upsert({
+          id: user.id,
+          pronouns: pronounValue,
+          updated_at: new Date(),
+        });
+      }
 
       setSelectedPronouns(pronounValue);
       setPronounModalVisible(false);
@@ -188,7 +246,9 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    setSelectedPronouns(user?.user_metadata?.pronouns || "");
+    if (user?.user_metadata?.pronouns && !profileData?.pronouns) {
+      setSelectedPronouns(user.user_metadata.pronouns);
+    }
   }, [user?.user_metadata?.pronouns]);
 
   return (
@@ -210,33 +270,35 @@ export default function ProfileScreen() {
               <Text style={styles.backIcon}>‹</Text>
             </Pressable>
 
-            <View style={styles.headerActions}>
-              <Pressable
-                style={styles.circleHeaderButton}
-                onPress={() => navigation.navigate("BackgroundBuild")}
-              >
-                <Text style={styles.headerButtonIcon}>↑</Text>
-              </Pressable>
+            {isOwnProfile && (
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={styles.circleHeaderButton}
+                  onPress={() => navigation.navigate("BackgroundBuild")}
+                >
+                  <Text style={styles.headerButtonIcon}>↑</Text>
+                </Pressable>
 
-              <Pressable
-                style={styles.circleHeaderButton}
-                onPress={() => navigation.navigate("Settings")}
-              >
-                <Text style={styles.headerButtonIcon}>⚙</Text>
-              </Pressable>
-            </View>
+                <Pressable
+                  style={styles.circleHeaderButton}
+                  onPress={() => navigation.navigate("Settings")}
+                >
+                  <Text style={styles.headerButtonIcon}>⚙</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
-          {/* Central Bitmoji Space - Loaded from imported image asset */}
+          {/* Central Bitmoji Space */}
           <View style={styles.avatarSpaceContainer}>
             <Image
-              source={leaningAvatar} // ✅ Fix 2: Directly pass the imported image variable
+              source={leaningAvatar}
               style={styles.avatarBitmoji}
               resizeMode="contain"
             />
           </View>
 
-          {/* Bottom Overlay Row (Snapcode, Name/Handle, Heart Action) */}
+          {/* Bottom Overlay Row (Snapcode, Name/Handle, Custom Heart) */}
           <View style={styles.headerBottomRow}>
             {/* Snapcode / Badge */}
             <View style={styles.snapcodeContainer}>
@@ -256,9 +318,20 @@ export default function ProfileScreen() {
             {/* Customize Heart Button */}
             <Pressable
               style={styles.heartButton}
-              onPress={() => navigation.navigate("CustomizationScreen")}
+              onPress={() => {
+                if (isOwnProfile) {
+                  navigation.navigate("CustomizationScreen");
+                }
+              }}
             >
-              <Text style={styles.heartIcon}>💛</Text>
+              {customHeartUrl ? (
+                <Image
+                  source={{ uri: customHeartUrl }}
+                  style={styles.customHeartImage}
+                />
+              ) : (
+                <Text style={styles.heartIcon}>💛</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -284,9 +357,9 @@ export default function ProfileScreen() {
           >
             <InfoPill
               icon=""
-              text={selectedPronouns || "+ Add pronouns"}
-              showArrow={true}
-              onPress={() => setPronounModalVisible(true)}
+              text={selectedPronouns || (isOwnProfile ? "+ Add pronouns" : "No pronouns")}
+              showArrow={isOwnProfile}
+              onPress={isOwnProfile ? () => setPronounModalVisible(true) : null}
             />
             <InfoPill icon="🎂" text="Mar 20" />
             <InfoPill icon="👻" text="1,936" />
@@ -315,12 +388,14 @@ export default function ProfileScreen() {
             onPress={() => navigation.navigate("BackgroundBuild")}
           />
 
-          <ProfileCard
-            icon="♥"
-            title="Customize hearts"
-            description="Express yourself"
-            onPress={() => navigation.navigate("CustomizationScreen")}
-          />
+          {isOwnProfile && (
+            <ProfileCard
+              icon="♥"
+              title="Customize hearts"
+              description="Express yourself"
+              onPress={() => navigation.navigate("CustomizationScreen")}
+            />
+          )}
 
           <SectionTitle>Friends</SectionTitle>
 
@@ -373,18 +448,22 @@ export default function ProfileScreen() {
             description="Invite friends or use it privately."
           />
 
-          <SectionTitle>Account</SectionTitle>
+          {isOwnProfile && (
+            <>
+              <SectionTitle>Account</SectionTitle>
 
-          <ProfileCard
-            icon="⚙"
-            title="Settings"
-            description="Manage your profile and account."
-            onPress={() => navigation.navigate("Settings")}
-          />
+              <ProfileCard
+                icon="⚙"
+                title="Settings"
+                description="Manage your profile and account."
+                onPress={() => navigation.navigate("Settings")}
+              />
 
-          <Pressable style={styles.logOutButton} onPress={handleSignOut}>
-            <Text style={styles.logOutButtonText}>Log Out</Text>
-          </Pressable>
+              <Pressable style={styles.logOutButton} onPress={handleSignOut}>
+                <Text style={styles.logOutButtonText}>Log Out</Text>
+              </Pressable>
+            </>
+          )}
 
           <View style={styles.footer}>
             <View style={styles.footerGhost}>
@@ -624,9 +703,16 @@ const styles = StyleSheet.create({
   },
   heartButton: {
     padding: 4,
+    justifyContent: "center",
+    alignItems: "center",
   },
   heartIcon: {
     fontSize: 48,
+  },
+  customHeartImage: {
+    width: 52,
+    height: 52,
+    resizeMode: "contain",
   },
 
   /* Body Content */
