@@ -302,7 +302,7 @@ export default function ProfileScreen() {
           />
 
           <ProfileCard
-            icon="https://link.snapchat.com/plus/plus.png"
+            icon="+"
             title="Manage Heart Accessiblity"
             description="Manage "
             onPress={() => navigation.navigate("BackgroundBuild")}
