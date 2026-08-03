@@ -17,7 +17,7 @@ import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 // ✅ Fix 1: Use a relative path to import your local image asset
-import leaningAvatar from "../../assets/Leaning against wall greeting.png";
+import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
 
 const handleSignOut = async () => {
   try {
@@ -326,6 +326,13 @@ export default function ProfileScreen() {
             <InfoPill icon="★" text="1,188" />
             <InfoPill icon="♓" text="Pisces" />
           </View>
+
+          <ProfileCard
+            icon="https://link.snapchat.com/plus/plus.png"
+            title="Manage Heart Accessiblity"
+            description="Manage "
+            onPress={() => navigation.navigate("BackgroundBuild")}
+          />
 
           <ProfileCard
             icon="+"
