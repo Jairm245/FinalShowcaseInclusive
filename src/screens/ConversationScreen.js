@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef,useEffect } from "react";
 import {
   SafeAreaView,
   View,
@@ -9,14 +9,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Image,
 } from "react-native";
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { supabase } from "../../utils/hooks/supabase";
+import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 export default function ConversationScreen({ route }) {
   const { chatbotName } = route.params;
+  const { user } = useAuthentication();
 
   const [message, setMessage] = useState("");
+  const [customHeartUrl, setCustomHeartUrl] = useState(null);
 
   const [messages, setMessages] = useState([
     {
@@ -36,12 +41,50 @@ export default function ConversationScreen({ route }) {
   ]);
 
   const listRef = useRef();
+  useEffect(() => {
+    fetchCustomHeart();
+  },[user]);
+  const fetchCustomHeart = async () => {
+    if(!user.id) return;
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("custom_heart_url")
+        .eq("id", user.id)
+        .maybeSingle();
+
+        if(data?.custom_heart_url) {
+          setCustomHeartUrl(data.custom_heart_url);
+        }
+        else if (user?.user_metadata?.custom_heart_url) {
+          setCustomHeartUrl(user.user_metadata.custom_heart_url);
+        }
+    }
+    catch (error) {
+      console.error("Error fetching custom heart:", error.message);
+    }
+  };
+
+  function sendHeart() {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        sender: "me",
+        name: "ME",
+        text: "",
+        color: "#FF2D55",
+        isHeart: true,
+        image: customHeartUrl
+      },
+    ]);
+  }
 
   function sendMessage() {
     if (!message.trim()) return;
 
-    setMessages([
-      ...messages,
+    setMessages((prev) => [
+      ...prev,
       {
         id: Date.now().toString(),
         sender: "me",
@@ -54,29 +97,28 @@ export default function ConversationScreen({ route }) {
     setMessage("");
   }
 
-  function renderMessage({ item }) {
+function renderMessage({ item }) {
     return (
       <View style={styles.messageWrapper}>
-        <Text
-          style={[
-            styles.sender,
-            {
-              color: item.color,
-            },
-          ]}
-        >
+        <Text style={[styles.sender, { color: item.color }]}>
           {item.name}
         </Text>
 
-        <View
-          style={[
-            styles.messageRow,
-            {
-              borderLeftColor: item.color,
-            },
-          ]}
-        >
-          <Text style={styles.messageText}>{item.text}</Text>
+        <View style={[styles.messageRow, { borderLeftColor: item.color }]}>
+          {/* Render Text Message */}
+          {item.text ? <Text style={styles.messageText}>{item.text}</Text> : null}
+
+          {/* Render Heart/Image Message */}
+          {item.isHeart || item.image ? (
+            item.image ? (
+              <Image
+                source={{ uri: item.image }}
+                style={styles.heartChatMessage}
+              />
+            ) : (
+              <Text style={styles.defaultHeartMessage}>💛</Text>
+            )
+          ) : null}
         </View>
       </View>
     );
@@ -84,23 +126,7 @@ export default function ConversationScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
-
-      {/* <View style={styles.header}>
-        <Ionicons name="chevron-back" size={32} />
-
-        <View style={styles.avatar}>
-          <Text>🙂</Text>
-        </View>
-
-        <Text style={styles.username}>{chatbotName}</Text>
-
-        <View style={styles.headerIcons}>
-          <Ionicons name="call" size={23} />
-
-          <Ionicons name="videocam" size={25} />
-        </View>
-      </View> */}
+      
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -144,9 +170,16 @@ export default function ConversationScreen({ route }) {
             </TouchableOpacity>
           )}
 
-          {/* Emoji */}
-          <TouchableOpacity>
-            <Text style={styles.emoji}>🙂</Text>
+          {/* Profile Custom Heart Button*/}
+          <TouchableOpacity onPress={sendHeart} style={styles.heartButton}>
+            {customHeartUrl ? (
+              <Image
+                source={{ uri: customHeartUrl }}
+                style={styles.heartImage}
+              />
+            ) : (
+              <Text style={styles.emoji}>💛</Text>
+            )}
           </TouchableOpacity>
 
           {/* Plus */}
@@ -217,7 +250,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#222",
   },
-
+  heartChatMessage: {
+    width: 70,
+    height: 70,
+    marginTop: 5,
+    resizeMode: "contain",
+  },
+  heartButton: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heartImage: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
+  },
   inputBar: {
     height: 55,
     flexDirection: "row",
