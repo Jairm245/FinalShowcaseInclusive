@@ -14,6 +14,8 @@ import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 import AddFriendBitmoji from "../components/AddFriendBitmoji";
 
+
+
 const SectionListBasics = () => {
   const navigation = useNavigation();
   const { user } = useAuthentication();
@@ -46,6 +48,7 @@ const SectionListBasics = () => {
     } finally {
       setLoading(false);
     }
+    console.log(profiles)
   };
 
   return (
