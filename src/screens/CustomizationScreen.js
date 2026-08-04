@@ -11,12 +11,12 @@ import {
   SafeAreaView,
   ActivityIndicator,
 } from "react-native";
-import Svg, { Path, ClipPath, Defs, Image as SvgImage, Text as SvgText, G } from "react-native-svg";
+import Svg, { Path, ClipPath, Defs, Image as SvgImage } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ViewShot from "react-native-view-shot";
 import Animated, {
   useSharedValue,
-  useAnimatedProps,
+  useAnimatedStyle,
   runOnJS,
 } from "react-native-reanimated";
 import { supabase } from "../../utils/hooks/supabase";
@@ -27,94 +27,80 @@ const NETWORK_HEADERS = {
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
 };
 
-// Create an Animated version of SVG G (Group) component
-const AnimatedG = Animated.createAnimatedComponent(G);
-
-// Path definition shared across fill, border, and clip paths
 const HEART_PATH_D =
   "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z";
 
-// --- Interactive Layer within SVG Bounds ---
+const CATEGORIES = [
+  { id: "nationality", label: "Nationality" },
+  { id: "lgbtqia", label: "LGBTQIA+" },
+  { id: "sports", label: "Sports" },
+  {id:"animals", label:"Animals"},
+];
+
+// --- Individual Sticker Layer with Compact Touch Target ---
 function InteractiveStickerLayer({ layer, isSelected, onSelect }) {
   const translateX = useSharedValue(layer.x || 0);
   const translateY = useSharedValue(layer.y || 0);
   const scale = useSharedValue(layer.scale || 1);
+  const savedScale = useSharedValue(layer.scale || 1);
+
+  // Sync scale if changed via button controls
+  useEffect(() => {
+    if (layer.scale !== undefined) {
+      scale.value = layer.scale;
+      savedScale.value = layer.scale;
+    }
+  }, [layer.scale]);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
       if (onSelect) runOnJS(onSelect)();
     })
     .onChange((e) => {
-      // Map screen drag coordinates to SVG viewBox scale space (24 / 250 scale ratio)
-      const nextX = translateX.value + e.changeX * (24 / 250);
-      const nextY = translateY.value + e.changeY * (24 / 250);
-
-      // Clamp coordinates to keep sticker origins within heart range
-      translateX.value = Math.max(-6, Math.min(6, nextX));
-      translateY.value = Math.max(-6, Math.min(6, nextY));
+      translateX.value += e.changeX;
+      translateY.value += e.changeY;
     });
 
-  const pinchGesture = Gesture.Pinch().onChange((e) => {
-    scale.value = Math.max(0.5, Math.min(3, scale.value * e.scaleChange));
-  });
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.max(0.4, Math.min(3.5, savedScale.value * e.scale));
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+    });
 
-  // Bind shared values to SVG transforms on the UI thread safely
-  const animatedGroupProps = useAnimatedProps(() => {
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { scale: scale.value },
-      ],
-    };
-  });
-
-  const clipId = `heartClipLayer-${layer.id}`;
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   return (
     <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-        <Svg width={250} height={250} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
-          {/* Defs nested locally so this independent SVG context can access the clip path */}
-          <Defs>
-            <ClipPath id={clipId}>
-              <Path d={HEART_PATH_D} />
-            </ClipPath>
-          </Defs>
-
-          <G clipPath={`url(#${clipId})`}>
-            <AnimatedG animatedProps={animatedGroupProps}>
-              {layer.type === "sticker" ? (
-                <SvgImage
-                  href={layer.source}
-                  x="8"
-                  y="8"
-                  width="8"
-                  height="8"
-                  preserveAspectRatio="xMidYMid meet"
-                />
-              ) : (
-                <SvgText
-                  x="12"
-                  y="12"
-                  fill={layer.color || "#FFFFFF"}
-                  fontSize="3"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  alignmentBaseline="central"
-                >
-                  {layer.content}
-                </SvgText>
-              )}
-            </AnimatedG>
-          </G>
-        </Svg>
-      </View>
+      <Animated.View
+        style={[
+          styles.stickerContainer,
+          isSelected && styles.selectedStickerBorder,
+          animatedStyle,
+        ]}
+      >
+        {layer.type === "sticker" ? (
+          <Image
+            source={layer.source}
+            style={styles.stickerImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <Text style={styles.layerText}>{layer.content}</Text>
+        )}
+      </Animated.View>
     </GestureDetector>
   );
 }
 
-// --- Main Creator Screen ---
+// --- Main Customization Screen ---
 export default function CustomizationScreen({ navigation }) {
   const { user } = useAuthentication();
   const viewShotRef = useRef(null);
@@ -124,8 +110,9 @@ export default function CustomizationScreen({ navigation }) {
   const [strokeColor, setStrokeColor] = useState("#8E44AD");
   const [selectedPattern, setSelectedPattern] = useState(null);
 
-  // Dynamic Stickers State from Supabase
+  // Dynamic Stickers State
   const [stickers, setStickers] = useState([]);
+  const [activeCategory, setActiveCategory] = useState("nationality");
   const [loadingStickers, setLoadingStickers] = useState(true);
 
   // Canvas Layers
@@ -133,7 +120,6 @@ export default function CustomizationScreen({ navigation }) {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [textInput, setTextInput] = useState("");
 
-  // Presets
   const frameColors = ["#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", "#000000"];
   const heartFillColors = ["#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", "#FFFFFF"];
 
@@ -163,8 +149,9 @@ export default function CustomizationScreen({ navigation }) {
         setStickers([
           {
             id: "mexico-flag",
-            image_url:
-              "https://upload.wikimedia.org/wikipedia/commons/6/61/Flag_of_Mexico%2C_1968.png",
+            image_url: "https://upload.wikimedia.org/wikipedia/commons/6/61/Flag_of_Mexico%2C_1968.png",
+            category: "nationality",
+            interest: "Mexico",
           },
         ]);
       }
@@ -190,17 +177,32 @@ export default function CustomizationScreen({ navigation }) {
     setTextInput("");
   };
 
-  const addStickerLayer = (imageUrl) => {
-    if (!imageUrl) return;
+  const addStickerLayer = (stickerItem) => {
+    if (!stickerItem?.image_url) return;
     const newLayer = {
       id: Date.now().toString(),
       type: "sticker",
-      source: { uri: imageUrl, headers: NETWORK_HEADERS },
+      source: { uri: stickerItem.image_url, headers: NETWORK_HEADERS },
+      interest: stickerItem.interest || stickerItem.title || "General",
       x: 0,
       y: 0,
       scale: 1,
     };
     setLayers([...layers, newLayer]);
+  };
+
+  const updateSelectedScale = (factor) => {
+    if (!selectedLayerId) return;
+    setLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === selectedLayerId) {
+          const currentScale = layer.scale || 1;
+          const newScale = Math.max(0.4, Math.min(3.5, currentScale * factor));
+          return { ...layer, scale: newScale };
+        }
+        return layer;
+      })
+    );
   };
 
   const deleteSelectedLayer = () => {
@@ -218,31 +220,30 @@ export default function CustomizationScreen({ navigation }) {
 
       setSelectedLayerId(null);
 
-      // 1. Capture the canvas view as PNG
+      // Capture canvas view as PNG
       const uri = await viewShotRef.current.capture();
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      // 2. Upload PNG to 'heartStorage' bucket
+      // Upload PNG to Supabase bucket
       const fileName = `custom-hearts/${user.id}-${Date.now()}.png`;
-      const { data, error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("heartStorage")
         .upload(fileName, arrayBuffer, { contentType: "image/png" });
 
-      if (error) {
-        Alert.alert("Upload Error", error.message);
+      if (uploadError) {
+        Alert.alert("Upload Error", uploadError.message);
         return;
       }
 
-      // 3. Get Public URL from 'heartStorage'
       const { data: urlData } = supabase.storage
         .from("heartStorage")
         .getPublicUrl(fileName);
 
       const publicUrl = urlData.publicUrl;
 
-      // 4. Save/Update public profile row in database
+      // Update public profile row
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
@@ -251,7 +252,6 @@ export default function CustomizationScreen({ navigation }) {
           updated_at: new Date(),
         });
 
-      // 5. Also sync to auth user metadata as fallback
       await supabase.auth.updateUser({
         data: { custom_heart_url: publicUrl },
       });
@@ -268,6 +268,14 @@ export default function CustomizationScreen({ navigation }) {
       Alert.alert("Error", "Could not save image.");
     }
   };
+
+  // Robust category filtering (strips spaces and normalizes case/plus signs)
+  const filteredStickers = stickers.filter((item) => {
+    if (!item.category) return activeCategory === "nationality";
+    const cleanDbCat = item.category.trim().toLowerCase().replace("+", "");
+    const cleanActiveCat = activeCategory.trim().toLowerCase().replace("+", "");
+    return cleanDbCat === cleanActiveCat;
+  });
 
   return (
     <View style={styles.container}>
@@ -299,7 +307,6 @@ export default function CustomizationScreen({ navigation }) {
                 </ClipPath>
               </Defs>
 
-              {/* Heart Fill Background */}
               {selectedPattern ? (
                 <SvgImage
                   href={{ uri: selectedPattern }}
@@ -314,7 +321,6 @@ export default function CustomizationScreen({ navigation }) {
                 <Path d={HEART_PATH_D} fill={fillColor} />
               )}
 
-              {/* Outline Border */}
               <Path
                 d={HEART_PATH_D}
                 fill="none"
@@ -324,7 +330,7 @@ export default function CustomizationScreen({ navigation }) {
               />
             </Svg>
 
-            {/* Draggable Layers Masked INSIDE Heart Bounds */}
+            {/* Draggable Layer Container */}
             {layers.map((layer) => (
               <InteractiveStickerLayer
                 key={layer.id}
@@ -335,15 +341,6 @@ export default function CustomizationScreen({ navigation }) {
             ))}
           </View>
         </ViewShot>
-
-        <View style={styles.floatingControls}>
-          <TouchableOpacity style={styles.circleIconBtn}>
-            <Text style={styles.undoText}>↶</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.circleIconBtn}>
-            <Text style={styles.undoText}>↷</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* BOTTOM DRAWER */}
@@ -351,13 +348,30 @@ export default function CustomizationScreen({ navigation }) {
         <View style={styles.handleBar} />
 
         <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Controls for Selected Layer */}
           {selectedLayerId && (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={deleteSelectedLayer}
-            >
-              <Text style={styles.deleteBtnText}>🗑 Delete Selected Item</Text>
-            </TouchableOpacity>
+            <View style={styles.selectedControlsRow}>
+              <TouchableOpacity
+                style={styles.scaleBtn}
+                onPress={() => updateSelectedScale(0.85)}
+              >
+                <Text style={styles.scaleBtnText}>🔍 - Scale Down</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.scaleBtn}
+                onPress={() => updateSelectedScale(1.15)}
+              >
+                <Text style={styles.scaleBtnText}>🔍 + Scale Up</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={deleteSelectedLayer}
+              >
+                <Text style={styles.deleteBtnText}>🗑 Delete</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {/* Section 1: Frame */}
@@ -425,20 +439,50 @@ export default function CustomizationScreen({ navigation }) {
 
           {/* Section 4: Dynamic Stickers */}
           <Text style={styles.sectionHeader}>Stickers</Text>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryTabsRow}>
+            {CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryTab,
+                  activeCategory === cat.id && styles.activeCategoryTab,
+                ]}
+                onPress={() => setActiveCategory(cat.id)}
+              >
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    activeCategory === cat.id && styles.activeCategoryTabText,
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           {loadingStickers ? (
-            <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 10 }} />
+            <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 15 }} />
+          ) : filteredStickers.length === 0 ? (
+            <Text style={styles.emptyText}>No stickers in this category yet.</Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
-              {stickers.map((item) => (
+              {filteredStickers.map((item) => (
                 <TouchableOpacity
                   key={item.id || item.image_url}
                   style={styles.stickerCard}
-                  onPress={() => addStickerLayer(item.image_url)}
+                  onPress={() => addStickerLayer(item)}
                 >
                   <Image
                     source={{ uri: item.image_url, headers: NETWORK_HEADERS }}
                     style={styles.stickerThumb}
                   />
+                  {item.interest ? (
+                    <Text style={styles.stickerTagText} numberOfLines={1}>
+                      {item.interest}
+                    </Text>
+                  ) : null}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -501,17 +545,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     position: "relative",
   },
-  floatingControls: {
+  stickerContainer: {
     position: "absolute",
-    bottom: 20,
-    left: 20,
-    flexDirection: "row",
-    gap: 10,
+    width: 60,
+    height: 60,
+    top: 95,
+    left: 95,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
   },
-  undoText: {
-    color: "#FFF",
-    fontSize: 20,
+  selectedStickerBorder: {
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+    borderRadius: 8,
+    borderStyle: "dashed",
+  },
+  stickerImage: {
+    width: "100%",
+    height: "100%",
+  },
+  layerText: {
+    color: "#FFFFFF",
+    fontSize: 16,
     fontWeight: "bold",
+    textAlign: "center",
   },
   bottomSheet: {
     flex: 0.9,
@@ -528,6 +586,35 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 15,
+  },
+  selectedControlsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+  scaleBtn: {
+    flex: 1,
+    backgroundColor: "#F2F2F7",
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  scaleBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1C1C1E",
+  },
+  deleteBtn: {
+    backgroundColor: "#FF3B30",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  deleteBtnText: {
+    color: "#FFF",
+    fontWeight: "bold",
+    fontSize: 12,
   },
   sectionHeader: {
     fontSize: 16,
@@ -585,29 +672,53 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontWeight: "bold",
   },
+  categoryTabsRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  categoryTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F2F2F7",
+    marginRight: 8,
+  },
+  activeCategoryTab: {
+    backgroundColor: "#007AFF",
+  },
+  categoryTabText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8E8E93",
+  },
+  activeCategoryTabText: {
+    color: "#FFFFFF",
+  },
   stickerCard: {
-    width: 70,
-    height: 70,
+    width: 75,
+    height: 80,
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    padding: 4,
   },
   stickerThumb: {
-    width: 50,
-    height: 50,
+    width: 45,
+    height: 45,
     resizeMode: "contain",
   },
-  deleteBtn: {
-    backgroundColor: "#FF3B30",
-    padding: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 5,
+  stickerTagText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#666",
+    marginTop: 2,
+    textAlign: "center",
   },
-  deleteBtnText: {
-    color: "#FFF",
-    fontWeight: "bold",
+  emptyText: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginVertical: 10,
   },
 });
