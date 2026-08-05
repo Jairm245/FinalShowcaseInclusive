@@ -7,6 +7,7 @@ import HomeScreen from "../screens/HomeScreen";
 import LogInScreen from "../screens/LogInScreen";
 import SignUpScreen from "../screens/SignUpScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import GroupheartsScreen from "../screens/GroupheartsScreen";
 
 const Stack = createStackNavigator();
 
@@ -32,6 +33,11 @@ export default function AuthStack() {
         <Stack.Screen
           name="Profile"
           component={ProfileScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Grouphearts"
+          component={GroupheartsScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

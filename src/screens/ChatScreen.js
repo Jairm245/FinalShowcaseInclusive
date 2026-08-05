@@ -12,6 +12,14 @@ export const CHATBOTS = {
     name: "React Native Chatbot",
     imageUrl: "https://loremflickr.com/140/140",
     component: BasicChatbot,
+    screen: "Conversation",
+  },
+  heartChatbot: {
+    id: "heartChatbot",
+    name: "Snap Stamps Chatbot",
+    imageUrl: "https://loremflickr.com/140/140",
+    component: BasicChatbot,
+    screen: "GroupheartsScreen",
   },
 };
 
@@ -38,7 +46,7 @@ export default function ChatScreen({ navigation }) {
           key={chat.id}
           style={styles.userButton}
           onPress={() =>
-            navigation.navigate("Conversation", {
+            navigation.navigate(chat.screen, {
               chatbotName: chat.name,
               chatId: chat.id,
             })

@@ -13,6 +13,7 @@ import MemoryScreen from "../screens/MemoryScreen";
 import EventScreen from "../screens/EventScreen"; //New component by Sona and Christian
 import BackgroundBuild from "../screens/BackgroundBuild";
 import CustomizationScreen from "../screens/CustomizationScreen";
+import GroupheartsScreen from "../screens/GroupheartsScreen"; 
 
 const Stack = createStackNavigator();
 
@@ -78,6 +79,11 @@ export default function App() {
         <Stack.Screen
           name="CustomizationScreen"
           component={CustomizationScreen}
+        />
+        <Stack.Screen
+          name="GroupheartsScreen"
+          component={GroupheartsScreen}
+          options={{ headerShown: true }}
         />
       </Stack.Navigator>
     </NavigationContainer>
