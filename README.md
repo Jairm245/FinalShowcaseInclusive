@@ -1,4 +1,4 @@
-# Snap Love
+# Snap Stamp
 
 We recently paired with rainbow labs to find out what the youth of ages 12-18 are struggling with and that is finding a safe space where they can express themselves and fight isolation. This feature was made to help people being able to express themselves and inspire others to do the same by following in their foot steps
 
@@ -7,12 +7,16 @@ We recently paired with rainbow labs to find out what the youth of ages 12-18 ar
    capture photo, flip camera, toggle flash, preview + retake)
 3. being able to add hearts to represent how people identify themselves as.
 4. changing the background of the chat
-5. changing the background of the profile screen to where the user can add stickers or utalize previously made snap features such the pets they have.
-6. Adding pronouns
-7. spotlight feature.
-8. sponsored hearts
-9. border around the profile picture
-10. tbd
+5. Customizing a stamp to express oneself
+6. Having a Snap Stamp next to the Bitmoji
+7. Adding pronouns
+8. Accessibility of who gets to see ones Stamp
+9. sponsored Stamps
+10. border around the profile picture
+11. add stickers to stamp
+12. Added Interest
+13. Adding Pronouns
+
 
 ## Tech stack
 
@@ -49,7 +53,7 @@ npm install expo
 npx expo install react-native-view-shot
 npx expo start
 @supabase/supabase-js
-tbd
+npm install @supabase/supabase-js
 ```
 
 Scan the QR code with the **Expo Go** app (SDK 54 build) on your phone.
@@ -63,4 +67,9 @@ App.jsx                    -- auth listener: shows LoginScreen or CameraScreen
 src/lib/supabase.js         -- Supabase client (put your keys here)
 src/screens/LoginScreen.jsx  -- Snapchat-styled auth screen
 src/screens/CameraScreen.jsx -- full-screen camera + capture/preview
+src/screens/ProfileScreen.js -- ProfileScreen
+src/screens/CustomizationScreen.js -- customize Stamp
+src/screens/GroupheartsScreen.js -- Shows Stamps being sent
+src/screens/AddFriendScreen.js -- Shows friends hearts in real time
+
 ```
