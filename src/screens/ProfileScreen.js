@@ -1,9 +1,25 @@
-import {Alert,Image,Modal,Pressable,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TextInput,View,ActivityIndicator,} from "react-native";
+import { Alert, ActivityIndicator, Image, ImageBackground, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
+} from "react-native";
 import { useEffect, useState, useCallback } from "react";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
+import stampBackground01 from "../../assets/backgrounds/STAMP_BG-01.png";
+import stampBackground02 from "../../assets/backgrounds/STAMP_BG-02.png";
+import stampBackground03 from "../../assets/backgrounds/STAMP_BG-03.png";
+import stampBackground04 from "../../assets/backgrounds/STAMP_BGS-04.png";
+import stampBackground05 from "../../assets/backgrounds/STAMP_BGS-05.png";
+import stampBackground06 from "../../assets/backgrounds/STAMP_BGS-06.png";
+
+const BITMOJI_BACKGROUNDS = [
+  { id: "stamp-01", label: "Background 1", source: stampBackground01 },
+  { id: "stamp-02", label: "Background 2", source: stampBackground02 },
+  { id: "stamp-03", label: "Background 3", source: stampBackground03 },
+  { id: "stamp-04", label: "Background 4", source: stampBackground04 },
+  { id: "stamp-05", label: "Background 5", source: stampBackground05 },
+  { id: "stamp-06", label: "Background 6", source: stampBackground06 },
+];
 
 // Default fallback list of interests
 const DEFAULT_INTERESTS = ["Gaming","Music","Photography","Anime","Sports","Cooking","Travel","Fashion","Art","Fitness","Technology","Movies",];
@@ -139,18 +155,22 @@ export default function ProfileScreen() {
   const [loadingHeartData, setLoadingHeartData] = useState(false);
   const [savingHeartData, setSavingHeartData] = useState(false);
 
+  // --- Bitmoji Background Selection State ---
+  const [backgroundModalVisible, setBackgroundModalVisible] = useState(false);
+  const [savingBackground, setSavingBackground] = useState(false);
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState(
+    user?.user_metadata?.bitmoji_background || "stamp-01"
+  );
+
   const email = user?.user_metadata?.email || user?.email || "";
-
   const username = profileData?.username || user?.user_metadata?.username || (email.includes("@") ? email.split("@")[0] : email) || "username";
-
   const displayName = profileData?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.display_name || "Ryan Aguilar";
-
   const profileInitial = username.length > 0 ? username.charAt(0).toUpperCase() : "U";
-
   const profileColor = route.params?.backgroundColor || "#9AA0A6";
-
+  const savedBackgroundId = profileData?.bitmoji_background || user?.user_metadata?.bitmoji_background || selectedBackgroundId || "stamp-01";
+  const selectedBackground = BITMOJI_BACKGROUNDS.find((background) => background.id === savedBackgroundId) || BITMOJI_BACKGROUNDS[0];
   const customHeartUrl = profileData?.custom_heart_url || user?.user_metadata?.custom_heart_url || null;
-
+  
   // Fetch Public Profile from database
   const fetchProfile = async () => {
     if (!targetUserId) return;
@@ -171,6 +191,9 @@ export default function ProfileScreen() {
         }
         if (data.interests) {
           setSelectedInterests(data.interests);
+        }
+        if (data.bitmoji_background) {
+          setSelectedBackgroundId(data.bitmoji_background);
         }
       }
     } catch (error) {
@@ -370,6 +393,48 @@ export default function ProfileScreen() {
     }
   };
 
+  const saveBitmojiBackground = async (backgroundId) => {
+    if (!isOwnProfile || !user?.id) return;
+
+    try {
+      setSavingBackground(true);
+      setSelectedBackgroundId(backgroundId);
+
+      const { error: authError } = await supabase.auth.updateUser({
+        data: { bitmoji_background: backgroundId },
+      });
+
+      if (authError) throw authError;
+
+      // This also saves to the profiles table when the
+      // bitmoji_background column exists in Supabase.
+      const { error: profileError } = await supabase.from("profiles").update({
+          bitmoji_background: backgroundId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (profileError) {
+        console.warn( "Background saved to auth metadata, but profiles table sync failed:", profileError.message );
+      } else {
+        setProfileData((current) => ({
+          ...(current || {}),
+          bitmoji_background: backgroundId,
+        }));
+      }
+
+      setBackgroundModalVisible(false);
+    } catch (error) {
+      console.error("Error saving Bitmoji background:", error?.message || error);
+      Alert.alert(
+        "Unable to save background",
+        "Please check your connection and try again."
+      );
+    } finally {
+      setSavingBackground(false);
+    }
+  };
+
   useEffect(() => {
     getPronouns();
     getInterests();
@@ -386,7 +451,10 @@ export default function ProfileScreen() {
     if (user?.user_metadata?.interests && (!profileData?.interests || profileData?.interests.length === 0)) {
       setSelectedInterests(user.user_metadata.interests);
     }
-  }, [user?.user_metadata]);
+    if (user?.user_metadata?.bitmoji_background && !profileData?.bitmoji_background) {
+      setSelectedBackgroundId(user.user_metadata.bitmoji_background);
+    }
+  }, [user?.user_metadata, profileData?.bitmoji_background]);
 
   useEffect(() => {
     if (heartModalVisible) {
@@ -404,7 +472,14 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header Hero Area */}
-        <View style={[styles.profileHeader, { backgroundColor: profileColor }]}>
+        <ImageBackground
+          source={selectedBackground.source}
+          style={[styles.profileHeader, { backgroundColor: profileColor }]}
+          imageStyle={styles.profileHeaderBackgroundImage}
+          resizeMode="cover"
+        >
+          <View style={styles.profileHeaderShade} />
+
           <View style={styles.navigationHeader}>
             <Pressable
               style={styles.circleHeaderButton}
@@ -417,9 +492,9 @@ export default function ProfileScreen() {
               <View style={styles.headerActions}>
                 <Pressable
                   style={styles.circleHeaderButton}
-                  onPress={() => navigation.navigate("BackgroundBuild")}
+                  onPress={() => setBackgroundModalVisible(true)}
                 >
-                  <Text style={styles.headerButtonIcon}>↑</Text>
+                  <Text style={styles.headerButtonIcon}>▧</Text>
                 </Pressable>
 
                 <Pressable
@@ -492,7 +567,7 @@ export default function ProfileScreen() {
               )}
             </Pressable>
           </View>
-        </View>
+        </ImageBackground>
 
         {/* Main Body */}
         <View style={styles.body}>
@@ -553,7 +628,6 @@ export default function ProfileScreen() {
             icon="https://link.snapchat.com/plus/plus.png"
             title="Snapchat+"
             description="Exclusive Early Access to lens, Bitmoji, etc..."
-            onPress={() => navigation.navigate("BackgroundBuild")}
           />
 
           <ProfileCard
@@ -657,6 +731,89 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* --- Bitmoji Background Selection Modal --- */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={backgroundModalVisible}
+        onRequestClose={() => setBackgroundModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setBackgroundModalVisible(false)}
+          />
+
+          <View style={styles.backgroundSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.pronounSheetHeader}>
+              <View style={styles.pronounHeaderText}>
+                <Text style={styles.pronounSheetTitle}>Choose a background</Text>
+                <Text style={styles.pronounSheetDescription}>
+                  Select the background displayed behind your Bitmoji.
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.closePronounButton}
+                onPress={() => setBackgroundModalVisible(false)}
+              >
+                <Text style={styles.closePronounButtonText}>×</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.backgroundGrid}
+            >
+              {BITMOJI_BACKGROUNDS.map((background) => {
+                const isSelected = selectedBackgroundId === background.id;
+
+                return (
+                  <Pressable
+                    key={background.id}
+                    style={[
+                      styles.backgroundOption,
+                      isSelected && styles.selectedBackgroundOption,
+                    ]}
+                    onPress={() => saveBitmojiBackground(background.id)}
+                    disabled={savingBackground}
+                  >
+                    <Image
+                      source={background.source}
+                      style={styles.backgroundThumbnail}
+                      resizeMode="cover"
+                    />
+
+                    <View style={styles.backgroundOptionFooter}>
+                      <Text
+                        style={[
+                          styles.backgroundOptionText,
+                          isSelected && styles.selectedBackgroundOptionText,
+                        ]}
+                      >
+                        {background.label}
+                      </Text>
+                      {isSelected ? (
+                        <Text style={styles.backgroundCheckmark}>✓</Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {savingBackground ? (
+              <View style={styles.backgroundSavingRow}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.backgroundSavingText}>Saving background...</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       {/* --- Interests Selection Modal --- */}
       <Modal
@@ -1080,10 +1237,18 @@ const styles = StyleSheet.create({
   /* Header Container */
   profileHeader: {
     paddingTop: 10,
+    overflow: "hidden",
     paddingHorizontal: 16,
     paddingBottom: 15,
     minHeight: 380,
     justifyContent: "space-between",
+  },
+  profileHeaderBackgroundImage: {
+    opacity: 1,
+  },
+  profileHeaderShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.12)",
   },
   navigationHeader: {
     width: "100%",
@@ -1436,6 +1601,72 @@ const styles = StyleSheet.create({
     backgroundColor: "#C7C7CC",
     alignSelf: "center",
     marginBottom: 16,
+  },
+
+  /* Bitmoji Background Picker */
+  backgroundSheet: {
+    maxHeight: "82%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 10,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+  },
+  backgroundGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingBottom: 8,
+  },
+  backgroundOption: {
+    width: "48%",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#E5E5EA",
+    backgroundColor: "#F2F2F7",
+    overflow: "hidden",
+    marginBottom: 14,
+  },
+  selectedBackgroundOption: {
+    borderColor: "#007AFF",
+  },
+  backgroundThumbnail: {
+    width: "100%",
+    height: 130,
+  },
+  backgroundOptionFooter: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+  },
+  backgroundOptionText: {
+    color: "#1C1C1E",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  selectedBackgroundOptionText: {
+    color: "#007AFF",
+    fontWeight: "700",
+  },
+  backgroundCheckmark: {
+    color: "#007AFF",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  backgroundSavingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 8,
+  },
+  backgroundSavingText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 8,
   },
 
   /* Interests Sheet Styles */
