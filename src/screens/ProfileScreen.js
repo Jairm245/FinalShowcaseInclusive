@@ -1,39 +1,12 @@
-import {
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-  ActivityIndicator,
-} from "react-native";
-
+import {Alert,Image,Modal,Pressable,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TextInput,View,ActivityIndicator,} from "react-native";
 import { useEffect, useState, useCallback } from "react";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
-
 import leaningAvatar from "../../assets/Leaning_against_wall_greeting.png";
 
 // Default fallback list of interests
-const DEFAULT_INTERESTS = [
-  "Gaming",
-  "Music",
-  "Photography",
-  "Anime",
-  "Sports",
-  "Cooking",
-  "Travel",
-  "Fashion",
-  "Art",
-  "Fitness",
-  "Technology",
-  "Movies",
-];
+const DEFAULT_INTERESTS = ["Gaming","Music","Photography","Anime","Sports","Cooking","Travel","Fashion","Art","Fitness","Technology","Movies",];
 
 // Hardcoded default friends list fallback
 const HARDCODED_FRIENDS = [
@@ -58,16 +31,8 @@ function SectionTitle({ children }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
-function ProfileCard({
-  icon,
-  title,
-  description,
-  showArrow = true,
-  onPress,
-}) {
-  const isImageIcon =
-    typeof icon === "string" &&
-    (icon.trim().startsWith("http://") || icon.trim().startsWith("https://"));
+function ProfileCard({icon,title,description,showArrow = true,onPress,}) {
+  const isImageIcon = typeof icon === "string" && (icon.trim().startsWith("http://") || icon.trim().startsWith("https://"));
 
   return (
     <Pressable
@@ -142,20 +107,26 @@ export default function ProfileScreen() {
   const [profileData, setProfileData] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Pronoun Modal States
+  // Pronoun & Identity Modal States
   const [pronouns, setPronouns] = useState([]);
   const [selectedPronouns, setSelectedPronouns] = useState(
     user?.user_metadata?.pronouns || ""
   );
+  const [selectedGenderIdentity, setSelectedGenderIdentity] = useState(
+    user?.user_metadata?.gender_identity || ""
+  );
+  const [customIdentityInput, setCustomIdentityInput] = useState(
+    user?.user_metadata?.gender_identity || ""
+  );
+  const [showCustomIdentityInput, setShowCustomIdentityInput] = useState(false);
+
   const [pronounModalVisible, setPronounModalVisible] = useState(false);
   const [loadingPronouns, setLoadingPronouns] = useState(false);
   const [savingPronouns, setSavingPronouns] = useState(false);
 
   // --- Interests Modal States ---
   const [interestsList, setInterestsList] = useState([]);
-  const [selectedInterests, setSelectedInterests] = useState(
-    user?.user_metadata?.interests || []
-  );
+  const [selectedInterests, setSelectedInterests] = useState( user?.user_metadata?.interests || []);
   const [interestModalVisible, setInterestModalVisible] = useState(false);
   const [loadingInterests, setLoadingInterests] = useState(false);
   const [savingInterests, setSavingInterests] = useState(false);
@@ -170,36 +141,22 @@ export default function ProfileScreen() {
 
   const email = user?.user_metadata?.email || user?.email || "";
 
-  const username =
-    profileData?.username ||
-    user?.user_metadata?.username ||
-    (email.includes("@") ? email.split("@")[0] : email) ||
-    "username";
+  const username = profileData?.username || user?.user_metadata?.username || (email.includes("@") ? email.split("@")[0] : email) || "username";
 
-  const displayName =
-    profileData?.display_name ||
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.display_name ||
-    "Ryan Aguilar";
+  const displayName = profileData?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.display_name || "Ryan Aguilar";
 
-  const profileInitial =
-    username.length > 0 ? username.charAt(0).toUpperCase() : "U";
+  const profileInitial = username.length > 0 ? username.charAt(0).toUpperCase() : "U";
 
   const profileColor = route.params?.backgroundColor || "#9AA0A6";
 
-  const customHeartUrl =
-    profileData?.custom_heart_url || user?.user_metadata?.custom_heart_url || null;
+  const customHeartUrl = profileData?.custom_heart_url || user?.user_metadata?.custom_heart_url || null;
 
   // Fetch Public Profile from database
   const fetchProfile = async () => {
     if (!targetUserId) return;
     try {
       setLoadingProfile(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", targetUserId)
-        .maybeSingle();
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", targetUserId).maybeSingle();
 
       if (error) {
         console.error("Error fetching public profile:", error.message);
@@ -207,6 +164,10 @@ export default function ProfileScreen() {
         setProfileData(data);
         if (data.pronouns) {
           setSelectedPronouns(data.pronouns);
+        }
+        if (data.gender_identity) {
+          setSelectedGenderIdentity(data.gender_identity);
+          setCustomIdentityInput(data.gender_identity);
         }
         if (data.interests) {
           setSelectedInterests(data.interests);
@@ -225,14 +186,11 @@ export default function ProfileScreen() {
     }, [targetUserId])
   );
 
-  // --- Pronouns Fetch & Save ---
+  // --- Pronouns & Identity Fetch & Save ---
   const getPronouns = async () => {
     try {
       setLoadingPronouns(true);
-      const { data, error } = await supabase
-        .from("Pronouns")
-        .select("id, pronouns, created_at")
-        .order("id", { ascending: true });
+      const { data, error } = await supabase.from("Pronouns").select("id, pronouns, created_at").order("id", { ascending: true });
 
       if (error) {
         console.error("Error fetching pronouns:", error.message);
@@ -247,30 +205,32 @@ export default function ProfileScreen() {
     }
   };
 
-  const savePronouns = async (pronounValue) => {
+  const savePronounsAndIdentity = async (pronounValue, genderValue) => {
     try {
       setSavingPronouns(true);
 
+      const targetPronoun = pronounValue !== undefined ? pronounValue : selectedPronouns;
+      const targetGender = genderValue !== undefined ? genderValue : selectedGenderIdentity;
+
       const { error: authError } = await supabase.auth.updateUser({
-        data: { pronouns: pronounValue },
+        data: { pronouns: targetPronoun, gender_identity: targetGender },
       });
       if (authError) throw authError;
 
       if (user?.id) {
-        await supabase.from("profiles").upsert({
-          id: user.id,
-          pronouns: pronounValue,
-          updated_at: new Date(),
-        });
+        try {
+          await supabase.from("profiles").upsert({ id: user.id, pronouns: targetPronoun, gender_identity: targetGender, updated_at: new Date(),});
+        } catch (dbErr) {
+          console.warn("Profiles DB sync warning:", dbErr.message);
+        }
       }
 
-      setSelectedPronouns(pronounValue);
+      setSelectedPronouns(targetPronoun);
+      setSelectedGenderIdentity(targetGender);
       setPronounModalVisible(false);
     } catch (error) {
-      console.error("Error saving pronouns:", error.message);
-      Alert.alert(
-        "Unable to save pronouns",
-        "Please check your connection and try again."
+      console.error("Error saving pronouns & identity:", error.message);
+      Alert.alert( "Unable to save changes", "Please check your connection and try again."
       );
     } finally {
       setSavingPronouns(false);
@@ -282,18 +242,14 @@ export default function ProfileScreen() {
     try {
       setLoadingInterests(true);
 
-      const { data, error } = await supabase
-        .from("Interests")
-        .select("id, interest, name")
-        .order("id", { ascending: true });
+      const { data, error } = await supabase.from("Interests").select("id, interest, name").order("id", { ascending: true });
 
       if (error || !data || data.length === 0) {
         setInterestsList(DEFAULT_INTERESTS.map((name, index) => ({ id: index, name })));
       } else {
-        setInterestsList(
-          data.map((item) => ({
-            id: item.id,
-            name: item.interest || item.name,
+        setInterestsList(data.map((item) => (
+          { 
+            id: item.id, name: item.interest || item.name,            
           }))
         );
       }
@@ -324,11 +280,7 @@ export default function ProfileScreen() {
 
       if (user?.id) {
         try {
-          await supabase.from("profiles").upsert({
-            id: user.id,
-            interests: selectedInterests,
-            updated_at: new Date(),
-          });
+          await supabase.from("profiles").upsert({ id: user.id, interests: selectedInterests, updated_at: new Date(),});
         } catch (dbErr) {
           console.warn("Profiles DB interest sync warning:", dbErr.message);
         }
@@ -337,10 +289,7 @@ export default function ProfileScreen() {
       setInterestModalVisible(false);
     } catch (error) {
       console.error("Error saving interests:", error.message);
-      Alert.alert(
-        "Unable to save interests",
-        "Please check your connection and try again."
-      );
+      Alert.alert( "Unable to save interests", "Please check your connection and try again.");
     } finally {
       setSavingInterests(false);
     }
@@ -357,11 +306,7 @@ export default function ProfileScreen() {
       }
 
       if (user?.id) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("heart_visibility, heart_allowed_friend_ids")
-          .eq("id", user.id)
-          .maybeSingle();
+        const { data: profile } = await supabase.from("profiles").select("heart_visibility, heart_allowed_friend_ids").eq("id", user.id).maybeSingle();
 
         if (profile) {
           if (profile.heart_visibility) setHeartVisibility(profile.heart_visibility);
@@ -370,10 +315,7 @@ export default function ProfileScreen() {
         }
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, username")
-        .neq("id", user?.id || "");
+      const { data, error } = await supabase.from("profiles").select("id, username").neq("id", user?.id || "");
 
       if (!error && data && data.length > 0) {
         setFriendsList(data);
@@ -403,17 +345,12 @@ export default function ProfileScreen() {
       const targetFriends = heartVisibility === "selected" ? selectedFriendIds : [];
 
       await supabase.auth.updateUser({
-        data: {
-          heart_visibility: heartVisibility,
-          heart_allowed_friend_ids: targetFriends,
-        },
+        data: { heart_visibility: heartVisibility, heart_allowed_friend_ids: targetFriends,},
       });
 
       if (user?.id) {
         try {
-          await supabase
-            .from("profiles")
-            .update({
+          await supabase.from("profiles").update({
               heart_visibility: heartVisibility,
               heart_allowed_friend_ids: targetFriends,
             })
@@ -441,6 +378,10 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (user?.user_metadata?.pronouns && !profileData?.pronouns) {
       setSelectedPronouns(user.user_metadata.pronouns);
+    }
+    if (user?.user_metadata?.gender_identity && !profileData?.gender_identity) {
+      setSelectedGenderIdentity(user.user_metadata.gender_identity);
+      setCustomIdentityInput(user.user_metadata.gender_identity);
     }
     if (user?.user_metadata?.interests && (!profileData?.interests || profileData?.interests.length === 0)) {
       setSelectedInterests(user.user_metadata.interests);
@@ -491,16 +432,34 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          {/* Central Bitmoji Space */}
+          {/* Central Area: Bitmoji Character + Extra Large Custom Heart Stand Side-by-Side */}
           <View style={styles.avatarSpaceContainer}>
             <Image
               source={leaningAvatar}
               style={styles.avatarBitmoji}
               resizeMode="contain"
             />
+
+            <Pressable
+              style={styles.largeHeartContainer}
+              onPress={() => {
+                if (isOwnProfile) {
+                  navigation.navigate("CustomizationScreen");
+                }
+              }}
+            >
+              {customHeartUrl ? (
+                <Image
+                  source={{ uri: customHeartUrl }}
+                  style={styles.customHeartImageLarge}
+                />
+              ) : (
+                <Text style={styles.heartIconLarge}>💛</Text>
+              )}
+            </Pressable>
           </View>
 
-          {/* Bottom Overlay Row (Snapcode, Name/Handle, Custom Heart) */}
+          {/* Bottom Overlay Row (Snapcode, Name/Handle, Original Heart) */}
           <View style={styles.headerBottomRow}>
             <View style={styles.snapcodeContainer}>
               <View style={styles.snapcodeBorder}>
@@ -549,26 +508,20 @@ export default function ProfileScreen() {
 
           {/* FIRST SECTION (NON-SCROLLING): Auto-wrapping Interests & Tags */}
           <View style={styles.infoWrapContainer}>
-            <InfoPill
-              icon=""
-              text={selectedPronouns || (isOwnProfile ? "+ Add pronouns" : "No pronouns")}
-              showArrow={isOwnProfile}
-              onPress={isOwnProfile ? () => setPronounModalVisible(true) : null}
-            />
+          <InfoPill
+            icon=""
+            text={
+              // Combine pronouns and gender identity dynamically if either (or both) exist
+              [selectedPronouns, selectedGenderIdentity].filter(Boolean).length > 0
+                ? [selectedPronouns, selectedGenderIdentity].filter(Boolean).join(" • ")
+                : isOwnProfile
+                ? "+ Add pronouns / identity"
+                : "No pronouns"
+            }
+            showArrow={isOwnProfile}
+            onPress={isOwnProfile ? () => setPronounModalVisible(true) : null}
+          />
 
-            <InfoPill icon="🎂" text="Mar 20" />
-            <InfoPill icon="👻" text="1,936" />
-            <InfoPill icon="♓" text="Pisces" showArrow={true} />
-
-            {/* Add Interests Pill */}
-            <InfoPill
-              icon="🔎"
-              text="Add Interests"
-              showArrow={isOwnProfile}
-              onPress={isOwnProfile ? () => setInterestModalVisible(true) : null}
-            />
-
-            {/* Display Selected Interests */}
             {(selectedInterests || []).map((interest, index) => (
               <InfoPill
                 key={index}
@@ -578,6 +531,16 @@ export default function ProfileScreen() {
               />
             ))}
 
+            <InfoPill
+              icon="🔎"
+              text="Add Interests"
+              showArrow={isOwnProfile}
+              onPress={isOwnProfile ? () => setInterestModalVisible(true) : null}
+            />
+
+            <InfoPill icon="🎂" text="Mar 20" />
+            <InfoPill icon="👻" text="1,936" />
+            <InfoPill icon="♓" text="Pisces" showArrow={true} />
           </View>
 
           {/* SECOND SECTION: Add Topic Chat */}
@@ -594,17 +557,10 @@ export default function ProfileScreen() {
           />
 
           <ProfileCard
-            icon="https://link.snapchat.com/plus/plus.png"
+            icon="+"
             title="Manage Heart Accessibility"
             description="Control who can see your heart customization."
             onPress={() => setHeartModalVisible(true)}
-          />
-
-          <ProfileCard
-            icon="+"
-            title="Profile Features"
-            description="Customize and explore your profile."
-            onPress={() => navigation.navigate("BackgroundBuild")}
           />
 
           {isOwnProfile && (
@@ -615,6 +571,14 @@ export default function ProfileScreen() {
               onPress={() => navigation.navigate("CustomizationScreen")}
             />
           )}
+
+            <ProfileCard
+            icon="+"
+            title="Profile Features"
+            description="Customize and explore your profile."
+            //onPress={() => navigation.navigate("BackgroundBuild")}
+            />
+
 
           <SectionTitle>Friends</SectionTitle>
 
@@ -933,7 +897,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* --- Pronoun Selection Modal --- */}
+      {/* --- Pronoun & Identity Selection Modal --- */}
       <Modal
         animationType="slide"
         transparent
@@ -951,9 +915,9 @@ export default function ProfileScreen() {
 
             <View style={styles.pronounSheetHeader}>
               <View style={styles.pronounHeaderText}>
-                <Text style={styles.pronounSheetTitle}>Select your pronouns</Text>
+                <Text style={styles.pronounSheetTitle}>Pronouns & Identity</Text>
                 <Text style={styles.pronounSheetDescription}>
-                  Your selection will appear as the first profile tag.
+                  Select your pronouns or type how you identify.
                 </Text>
               </View>
 
@@ -970,6 +934,8 @@ export default function ProfileScreen() {
               contentContainerStyle={styles.pronounOptionsContent}
               showsVerticalScrollIndicator={false}
             >
+              {/* Pronouns Section */}
+              <Text style={styles.modalSectionHeader}>Pronouns</Text>
               {loadingPronouns ? (
                 <Text style={styles.statusText}>Loading pronouns...</Text>
               ) : pronouns.length === 0 ? (
@@ -994,7 +960,7 @@ export default function ProfileScreen() {
                         isSelected && styles.selectedPronounOption,
                         pressed && styles.pronounOptionPressed,
                       ]}
-                      onPress={() => savePronouns(option)}
+                      onPress={() => savePronounsAndIdentity(option, selectedGenderIdentity)}
                       disabled={savingPronouns}
                     >
                       <Text
@@ -1014,21 +980,76 @@ export default function ProfileScreen() {
                 })
               )}
 
+              {/* Custom Gender / Identify As Section */}
+              <Text style={[styles.modalSectionHeader, { marginTop: 18 }]}>
+                Identify As
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.pronounOption,
+                  (showCustomIdentityInput || selectedGenderIdentity) &&
+                    styles.selectedPronounOption,
+                  pressed && styles.pronounOptionPressed,
+                ]}
+                onPress={() => setShowCustomIdentityInput(!showCustomIdentityInput)}
+              >
+                <Text
+                  style={[
+                    styles.pronounOptionText,
+                    (showCustomIdentityInput || selectedGenderIdentity) &&
+                      styles.selectedPronounOptionText,
+                  ]}
+                >
+                  Custom (Type your own)
+                </Text>
+
+                {selectedGenderIdentity ? (
+                  <Text style={styles.pronounCheckmark}>✓</Text>
+                ) : null}
+              </Pressable>
+
+              {/* Text Input Box for Custom Identity */}
+              {(showCustomIdentityInput || selectedGenderIdentity) && (
+                <View style={styles.customInputContainer}>
+                  <TextInput
+                    style={styles.customTextInput}
+                    placeholder="Enter how you identify (e.g. Non-binary)"
+                    placeholderTextColor="#8E8E93"
+                    value={customIdentityInput}
+                    onChangeText={setCustomIdentityInput}
+                  />
+
+                  <Pressable
+                    style={styles.saveCustomIdentityButton}
+                    onPress={() =>
+                      savePronounsAndIdentity(selectedPronouns, customIdentityInput.trim())
+                    }
+                  >
+                    <Text style={styles.saveCustomIdentityText}>Apply Identity</Text>
+                  </Pressable>
+                </View>
+              )}
+
               <Pressable
                 style={({ pressed }) => [
                   styles.removePronounsButton,
                   pressed && styles.pronounOptionPressed,
                 ]}
-                onPress={() => savePronouns("")}
-                disabled={savingPronouns || !selectedPronouns}
+                onPress={() => {
+                  setCustomIdentityInput("");
+                  setShowCustomIdentityInput(false);
+                  savePronounsAndIdentity("", "");
+                }}
+                disabled={savingPronouns || (!selectedPronouns && !selectedGenderIdentity)}
               >
                 <Text
                   style={[
                     styles.removePronounsButtonText,
-                    !selectedPronouns && styles.disabledRemovePronounsText,
+                    !selectedPronouns && !selectedGenderIdentity && styles.disabledRemovePronounsText,
                   ]}
                 >
-                  Remove pronouns
+                  Clear pronouns & identity
                 </Text>
               </Pressable>
 
@@ -1095,16 +1116,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  /* Avatar Area */
+  /* Avatar & Standing Large Custom Heart Area */
   avatarSpaceContainer: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 10,
-    height: 220,
+    height: 270,
   },
   avatarBitmoji: {
-    width: "100%",
+    width: 250,
     height: "100%",
+  },
+  largeHeartContainer: {
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: -100,
+  },
+  customHeartImageLarge: {
+    width: 140,
+    height: 190,
+    resizeMode: "contain",
+  },
+  heartIconLarge: {
+    fontSize: 110,
   },
 
   /* Bottom Row inside Header */
@@ -1597,6 +1633,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
+  modalSectionHeader: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 8,
+  },
+  customInputContainer: {
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  customTextInput: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+    backgroundColor: "#F2F2F7",
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: "#000000",
+  },
+  saveCustomIdentityButton: {
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#007AFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  saveCustomIdentityText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
   closePronounButton: {
     width: 32,
     height: 32,
@@ -1656,7 +1725,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFE5E7",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 6,
+    marginTop: 10,
   },
   removePronounsButtonText: {
     color: "#FF3B30",
