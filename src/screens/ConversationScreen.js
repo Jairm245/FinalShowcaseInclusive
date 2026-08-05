@@ -1,4 +1,4 @@
-import React, { useState, useRef,useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   SafeAreaView,
   View,
@@ -17,7 +17,7 @@ import { supabase } from "../../utils/hooks/supabase";
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 
 export default function ConversationScreen({ route }) {
-  const { chatbotName } = route.params;
+  const { chatbotName } = route?.params || {};
   const { user } = useAuthentication();
 
   const [message, setMessage] = useState("");
@@ -27,7 +27,7 @@ export default function ConversationScreen({ route }) {
     {
       id: "1",
       sender: "bot",
-      name: chatbotName,
+      name: chatbotName || "Bot",
       text: "Hi Sarah",
       color: "#00A7B5",
     },
@@ -40,12 +40,14 @@ export default function ConversationScreen({ route }) {
     },
   ]);
 
-  const listRef = useRef();
+  const listRef = useRef(null);
+
   useEffect(() => {
     fetchCustomHeart();
-  },[user]);
+  }, [user]);
+
   const fetchCustomHeart = async () => {
-    if(!user.id) return;
+    if (!user?.id) return;
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -53,19 +55,18 @@ export default function ConversationScreen({ route }) {
         .eq("id", user.id)
         .maybeSingle();
 
-        if(data?.custom_heart_url) {
-          setCustomHeartUrl(data.custom_heart_url);
-        }
-        else if (user?.user_metadata?.custom_heart_url) {
-          setCustomHeartUrl(user.user_metadata.custom_heart_url);
-        }
-    }
-    catch (error) {
+      if (data?.custom_heart_url) {
+        setCustomHeartUrl(data.custom_heart_url);
+      } else if (user?.user_metadata?.custom_heart_url) {
+        setCustomHeartUrl(user.user_metadata.custom_heart_url);
+      }
+    } catch (error) {
       console.error("Error fetching custom heart:", error.message);
     }
   };
 
-  function sendHeart() {
+  async function sendHeart() {
+    if (!user?.id) return;
     setMessages((prev) => [
       ...prev,
       {
@@ -75,7 +76,7 @@ export default function ConversationScreen({ route }) {
         text: "",
         color: "#FF2D55",
         isHeart: true,
-        image: customHeartUrl
+        image: customHeartUrl,
       },
     ]);
   }
@@ -89,7 +90,7 @@ export default function ConversationScreen({ route }) {
         id: Date.now().toString(),
         sender: "me",
         name: "ME",
-        text: message,
+        text: message.trim(),
         color: "#FF2D55",
       },
     ]);
@@ -97,7 +98,7 @@ export default function ConversationScreen({ route }) {
     setMessage("");
   }
 
-function renderMessage({ item }) {
+  function renderMessage({ item }) {
     return (
       <View style={styles.messageWrapper}>
         <Text style={[styles.sender, { color: item.color }]}>
@@ -126,24 +127,22 @@ function renderMessage({ item }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      
-
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         <FlatList
           ref={listRef}
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.messages}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          onLayout={() => listRef.current?.scrollToEnd({ animated: true })}
         />
 
         {/* INPUT AREA */}
-
-        {/* INPUT AREA */}
-
         <View style={styles.inputBar}>
           {/* Camera */}
           <TouchableOpacity>
@@ -157,20 +156,21 @@ function renderMessage({ item }) {
             placeholder="Chat"
             style={styles.input}
             onSubmitEditing={sendMessage}
+            returnKeyType="send"
           />
 
-          {/* Dynamic Button */}
+          {/* Dynamic Send/Mic Button */}
           {message.length > 0 ? (
             <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
               <Ionicons name="arrow-up" size={22} color="white" />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity>
-              <Ionicons name="mic" size={24} />
+              <Ionicons name="mic" size={24} color="#000" />
             </TouchableOpacity>
           )}
 
-          {/* Profile Custom Heart Button*/}
+          {/* Profile Custom Heart Button */}
           <TouchableOpacity onPress={sendHeart} style={styles.heartButton}>
             {customHeartUrl ? (
               <Image
@@ -184,68 +184,36 @@ function renderMessage({ item }) {
 
           {/* Plus */}
           <TouchableOpacity>
-            <Ionicons name="add-circle-outline" size={28} />
+            <Ionicons name="add-circle-outline" size={28} color="#000" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
   },
-
-  header: {
-    height: 65,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-  },
-
-  avatar: {
-    height: 38,
-    width: 38,
-    borderRadius: 19,
-    backgroundColor: "#FFFC00",
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 10,
-  },
-
-  username: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginLeft: 10,
-    flex: 1,
-  },
-
-  headerIcons: {
-    flexDirection: "row",
-    gap: 18,
-  },
-
   messages: {
     paddingHorizontal: 12,
     paddingBottom: 20,
+    paddingTop: 10,
   },
-
   messageWrapper: {
     marginVertical: 7,
   },
-
   sender: {
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 3,
   },
-
   messageRow: {
     borderLeftWidth: 3,
     paddingLeft: 8,
   },
-
   messageText: {
     fontSize: 18,
     color: "#222",
@@ -255,6 +223,10 @@ const styles = StyleSheet.create({
     height: 70,
     marginTop: 5,
     resizeMode: "contain",
+  },
+  defaultHeartMessage: {
+    fontSize: 40,
+    marginTop: 5,
   },
   heartButton: {
     justifyContent: "center",
@@ -273,8 +245,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderTopWidth: 1,
     borderColor: "#eee",
+    backgroundColor: "#fff",
   },
-
   input: {
     flex: 1,
     height: 40,
@@ -283,7 +255,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     fontSize: 17,
   },
-
   emoji: {
     fontSize: 25,
   },

@@ -35,6 +35,10 @@ const CATEGORIES = [
   { id: "lgbtqia", label: "LGBTQIA+" },
   { id: "sports", label: "Sports" },
   {id:"animals", label:"Animals"},
+  {id: "music", label:"Music"},
+  {id:"food", label:"Food"},
+  {id:"gaming", label:"Gaming"},
+
 ];
 
 // --- Individual Sticker Layer with Compact Touch Target ---
@@ -123,11 +127,41 @@ export default function CustomizationScreen({ navigation }) {
   const frameColors = ["#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", "#000000"];
   const heartFillColors = ["#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", "#FFFFFF"];
 
-  const patterns = [
-    { id: "none", uri: null, label: "Solid" },
-    { id: "glitter", uri: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400", label: "Glitter" },
-    { id: "galaxy", uri: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400", label: "Galaxy" },
-  ];
+ const patterns = [
+  { id: "none", uri: null, label: "Solid" },
+  { id: "glitter", uri: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400", label: "Glitter" },
+  { id: "galaxy", uri: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400", label: "Galaxy" },
+  { 
+    id: "stamp-01", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-01.png")).uri, 
+    label: "Rainbow" 
+  },
+  { 
+    id: "stamp-02", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-02.png")).uri, 
+    label: "Sunset" 
+  },
+  { 
+    id: "stamp-03", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-03.png")).uri, 
+    label: "Sunshine" 
+  },
+  { 
+    id: "stamp-04", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-04.png")).uri, 
+    label: "Pink Aura" 
+  },
+  { 
+    id: "stamp-05", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-05.png")).uri, 
+    label: "Lime Mesh" 
+  },
+  { 
+    id: "stamp-06", 
+    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-06.png")).uri, 
+    label: "Cyber Blue" 
+  },
+];
 
   useEffect(() => {
     fetchStickers();
