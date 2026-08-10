@@ -73,3 +73,31 @@ src/screens/GroupheartsScreen.js -- Shows Stamps being sent
 src/screens/AddFriendScreen.js -- Shows friends hearts in real time
 
 ```
+
+## 4 Project Usage
+
+
+
+https://github.com/user-attachments/assets/16bcad77-ea32-43cb-8251-b549aa6b7ded
+
+Getting Started
+1. Open Your Profile
+From the main Chat screen, tap your profile icon in the top-left corner to open your profile.
+2. Open Snap Stamps
+On your profile, locate the heart-shaped Snap Stamp on the right side of your profile banner. Tap the heart to open the customization screen.
+3. Choose a Frame Color
+4. Under the Frame section, select a color for the outline of your heart. Your changes will appear immediately in the preview at the top.
+Choose a Background
+5. Scroll through the Background options and select the design or color you want to use inside your heart.
+Add Custom Text
+6. Under Add Text, type a word or pronouns you would like displayed on your Snap Stamp. Tap Add to place the text onto your heart.
+Add Stickers
+7. Browse the available sticker categories, such as Nationality, LGBTQIA+, Sports, and Animals. Select a category, then tap a sticker to add it to your Snap Stamp.
+8. Preview Your Snap Stamp
+9. As you customize your heart, use the preview at the top of the screen to see how your selections look together.
+Save Your Snap Stamp
+10. Once you're happy with your design, tap Save in the top-right corner.
+Confirm Your Changes
+11. A confirmation message will appear letting you know that your heart has been updated. Tap OK to continue.
+View It on Your Profile
+12. Return to your profile to see your newly customized Snap Stamp displayed on your profile banner.
