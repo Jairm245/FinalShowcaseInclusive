@@ -119,7 +119,7 @@ export default function CustomizationScreen({ navigation }) {
 
   // EXPANDED FRAME COLORS (20 options)
   const frameColors = [
-    "#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", 
+    "#8E44AD", "#FF2D55", ,"#FFFC00","#FF9500", "#4CD964", "#007AFF", 
     "#000000", "#00FFFF", "#FF00FF", "#FFFFFF", "#C0C0C0",
     "#A3FF00", "#E8D7FF", "#FF007F", "#5B2C6F", "#117A65",
     "#D4AC0D", "#FF6B6B", "#2B1E4A", "#00F5D4", "#FFD166"
@@ -127,7 +127,7 @@ export default function CustomizationScreen({ navigation }) {
 
   // EXPANDED HEART FILL COLORS (18 options)
   const heartFillColors = [
-    "#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", 
+    "#FFFC00", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", 
     "#FFFFFF", "#FFC0CB", "#E6E6FA", "#D4F1F4", "#FFFDD0",
     "#FF6F61", "#D80032", "#2B1E4A", "#00F5D4", "#000000",
     "#222222", "#FFD166", "#83C5BE"
