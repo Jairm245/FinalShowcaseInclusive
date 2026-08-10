@@ -1,4 +1,4 @@
-# Snap Love
+# Snap Stamp
 
 We recently paired with rainbow labs to find out what the youth of ages 12-18 are struggling with and that is finding a safe space where they can express themselves and fight isolation. This feature was made to help people being able to express themselves and inspire others to do the same by following in their foot steps
 
@@ -7,12 +7,16 @@ We recently paired with rainbow labs to find out what the youth of ages 12-18 ar
    capture photo, flip camera, toggle flash, preview + retake)
 3. being able to add hearts to represent how people identify themselves as.
 4. changing the background of the chat
-5. changing the background of the profile screen to where the user can add stickers or utalize previously made snap features such the pets they have.
-6. Adding pronouns
-7. spotlight feature.
-8. sponsored hearts
-9. border around the profile picture
-10. tbd
+5. Customizing a stamp to express oneself
+6. Having a Snap Stamp next to the Bitmoji
+7. Adding pronouns
+8. Accessibility of who gets to see ones Stamp
+9. sponsored Stamps
+10. border around the profile picture
+11. add stickers to stamp
+12. Added Interest
+13. Adding Pronouns
+
 
 ## Tech stack
 
@@ -49,7 +53,7 @@ npm install expo
 npx expo install react-native-view-shot
 npx expo start
 @supabase/supabase-js
-tbd
+npm install @supabase/supabase-js
 ```
 
 Scan the QR code with the **Expo Go** app (SDK 54 build) on your phone.
@@ -63,4 +67,37 @@ App.jsx                    -- auth listener: shows LoginScreen or CameraScreen
 src/lib/supabase.js         -- Supabase client (put your keys here)
 src/screens/LoginScreen.jsx  -- Snapchat-styled auth screen
 src/screens/CameraScreen.jsx -- full-screen camera + capture/preview
+src/screens/ProfileScreen.js -- ProfileScreen
+src/screens/CustomizationScreen.js -- customize Stamp
+src/screens/GroupheartsScreen.js -- Shows Stamps being sent
+src/screens/AddFriendScreen.js -- Shows friends hearts in real time
+
 ```
+
+## 4 Project Usage
+
+
+
+https://github.com/user-attachments/assets/16bcad77-ea32-43cb-8251-b549aa6b7ded
+
+Getting Started
+1. Open Your Profile
+From the main Chat screen, tap your profile icon in the top-left corner to open your profile.
+2. Open Snap Stamps
+On your profile, locate the heart-shaped Snap Stamp on the right side of your profile banner. Tap the heart to open the customization screen.
+3. Choose a Frame Color
+4. Under the Frame section, select a color for the outline of your heart. Your changes will appear immediately in the preview at the top.
+Choose a Background
+5. Scroll through the Background options and select the design or color you want to use inside your heart.
+Add Custom Text
+6. Under Add Text, type a word or pronouns you would like displayed on your Snap Stamp. Tap Add to place the text onto your heart.
+Add Stickers
+7. Browse the available sticker categories, such as Nationality, LGBTQIA+, Sports, and Animals. Select a category, then tap a sticker to add it to your Snap Stamp.
+8. Preview Your Snap Stamp
+9. As you customize your heart, use the preview at the top of the screen to see how your selections look together.
+Save Your Snap Stamp
+10. Once you're happy with your design, tap Save in the top-right corner.
+Confirm Your Changes
+11. A confirmation message will appear letting you know that your heart has been updated. Tap OK to continue.
+View It on Your Profile
+12. Return to your profile to see your newly customized Snap Stamp displayed on your profile banner.

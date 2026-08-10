@@ -11,7 +11,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
 } from "react-native";
-import Svg, { Path, ClipPath, Defs, Image as SvgImage } from "react-native-svg";
+import Svg, { Path, ClipPath, Defs, Image as SvgImage, Pattern } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ViewShot from "react-native-view-shot";
 import Animated, {
@@ -34,21 +34,19 @@ const CATEGORIES = [
   { id: "nationality", label: "Nationality" },
   { id: "lgbtqia", label: "LGBTQIA+" },
   { id: "sports", label: "Sports" },
-  {id:"animals", label:"Animals"},
-  {id: "music", label:"Music"},
-  {id:"food", label:"Food"},
-  {id:"gaming", label:"Gaming"},
-
+  { id: "animals", label: "Animals" },
+  { id: "music", label: "Music" },
+  { id: "food", label: "Food" },
+  { id: "gaming", label: "Gaming" },
 ];
 
-// --- Individual Sticker Layer with Compact Touch Target ---
+// --- Individual Sticker Layer ---
 function InteractiveStickerLayer({ layer, isSelected, onSelect }) {
   const translateX = useSharedValue(layer.x || 0);
   const translateY = useSharedValue(layer.y || 0);
   const scale = useSharedValue(layer.scale || 1);
   const savedScale = useSharedValue(layer.scale || 1);
 
-  // Sync scale if changed via button controls
   useEffect(() => {
     if (layer.scale !== undefined) {
       scale.value = layer.scale;
@@ -83,13 +81,7 @@ function InteractiveStickerLayer({ layer, isSelected, onSelect }) {
 
   return (
     <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
-      <Animated.View
-        style={[
-          styles.stickerContainer,
-          isSelected && styles.selectedStickerBorder,
-          animatedStyle,
-        ]}
-      >
+      <Animated.View style={[styles.stickerContainer, animatedStyle]}>
         {layer.type === "sticker" ? (
           <Image
             source={layer.source}
@@ -113,6 +105,7 @@ export default function CustomizationScreen({ navigation }) {
   const [fillColor, setFillColor] = useState("#FFF000");
   const [strokeColor, setStrokeColor] = useState("#8E44AD");
   const [selectedPattern, setSelectedPattern] = useState(null);
+  const [selectedFramePattern, setSelectedFramePattern] = useState(null);
 
   // Dynamic Stickers State
   const [stickers, setStickers] = useState([]);
@@ -124,44 +117,46 @@ export default function CustomizationScreen({ navigation }) {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [textInput, setTextInput] = useState("");
 
-  const frameColors = ["#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", "#000000"];
-  const heartFillColors = ["#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", "#FFFFFF"];
+  // EXPANDED FRAME COLORS (20 options)
+  const frameColors = [
+    "#8E44AD", "#FF2D55", "#FF9500", "#4CD964", "#007AFF", 
+    "#000000", "#00FFFF", "#FF00FF", "#FFFFFF", "#C0C0C0",
+    "#A3FF00", "#E8D7FF", "#FF007F", "#5B2C6F", "#117A65",
+    "#D4AC0D", "#FF6B6B", "#2B1E4A", "#00F5D4", "#FFD166"
+  ];
 
- const patterns = [
-  { id: "none", uri: null, label: "Solid" },
-  { id: "glitter", uri: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400", label: "Glitter" },
-  { id: "galaxy", uri: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400", label: "Galaxy" },
-  { 
-    id: "stamp-01", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-01.png")).uri, 
-    label: "Rainbow" 
-  },
-  { 
-    id: "stamp-02", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-02.png")).uri, 
-    label: "Sunset" 
-  },
-  { 
-    id: "stamp-03", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-03.png")).uri, 
-    label: "Sunshine" 
-  },
-  { 
-    id: "stamp-04", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-04.png")).uri, 
-    label: "Pink Aura" 
-  },
-  { 
-    id: "stamp-05", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-05.png")).uri, 
-    label: "Lime Mesh" 
-  },
-  { 
-    id: "stamp-06", 
-    uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-06.png")).uri, 
-    label: "Cyber Blue" 
-  },
-];
+  // EXPANDED HEART FILL COLORS (18 options)
+  const heartFillColors = [
+    "#FFF000", "#FF2D55", "#FF9500", "#4CD964", "#5AC8FA", 
+    "#FFFFFF", "#FFC0CB", "#E6E6FA", "#D4F1F4", "#FFFDD0",
+    "#FF6F61", "#D80032", "#2B1E4A", "#00F5D4", "#000000",
+    "#222222", "#FFD166", "#83C5BE"
+  ];
+
+  // FRAME PATTERNS
+  const framePatterns = [
+    { id: "gold-foil", uri: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400", label: "Gold Foil" },
+    { id: "silver-chrome", uri: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400", label: "Chrome" },
+    { id: "holo-frame", uri: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400", label: "Hologram" },
+    { id: "neon-grid", uri: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=400", label: "Cyber" },
+    { id: "rose-gold", uri: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=400", label: "Rose Gold" },
+  ];
+
+  // EXPANDED BACKGROUND PATTERNS
+  const patterns = [
+    { id: "none", uri: null, label: "Solid" },
+    { id: "glitter", uri: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400", label: "Glitter" },
+    { id: "galaxy", uri: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400", label: "Galaxy" },
+    { id: "marble", uri: "https://images.unsplash.com/photo-1563089145-599997674d42?w=400", label: "Marble" },
+    { id: "vaporwave", uri: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400", label: "Vaporwave" },
+    { id: "clouds", uri: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=400", label: "Clouds" },
+    { id: "stamp-01", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-01.png")).uri, label: "Rainbow" },
+    { id: "stamp-02", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-02.png")).uri, label: "Sunset" },
+    { id: "stamp-03", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BG-03.png")).uri, label: "Sunshine" },
+    { id: "stamp-04", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-04.png")).uri, label: "Pink Aura" },
+    { id: "stamp-05", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-05.png")).uri, label: "Lime Mesh" },
+    { id: "stamp-06", uri: Image.resolveAssetSource(require("../../assets/backgrounds/STAMP_BGS-06.png")).uri, label: "Cyber Blue" },
+  ];
 
   useEffect(() => {
     fetchStickers();
@@ -254,13 +249,11 @@ export default function CustomizationScreen({ navigation }) {
 
       setSelectedLayerId(null);
 
-      // Capture canvas view as PNG
       const uri = await viewShotRef.current.capture();
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      // Upload PNG to Supabase bucket
       const fileName = `custom-hearts/${user.id}-${Date.now()}.png`;
       const { error: uploadError } = await supabase.storage
         .from("heartStorage")
@@ -277,7 +270,6 @@ export default function CustomizationScreen({ navigation }) {
 
       const publicUrl = urlData.publicUrl;
 
-      // Update public profile row
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
@@ -303,7 +295,6 @@ export default function CustomizationScreen({ navigation }) {
     }
   };
 
-  // Robust category filtering (strips spaces and normalizes case/plus signs)
   const filteredStickers = stickers.filter((item) => {
     if (!item.category) return activeCategory === "nationality";
     const cleanDbCat = item.category.trim().toLowerCase().replace("+", "");
@@ -339,6 +330,21 @@ export default function CustomizationScreen({ navigation }) {
                 <ClipPath id="heartClipMain">
                   <Path d={HEART_PATH_D} />
                 </ClipPath>
+                {selectedFramePattern && (
+                  <Pattern
+                    id="framePattern"
+                    width="100%"
+                    height="100%"
+                    patternUnits="userSpaceOnUse"
+                  >
+                    <SvgImage
+                      href={{ uri: selectedFramePattern }}
+                      width="24"
+                      height="24"
+                      preserveAspectRatio="xMidYMid slice"
+                    />
+                  </Pattern>
+                )}
               </Defs>
 
               {selectedPattern ? (
@@ -358,8 +364,8 @@ export default function CustomizationScreen({ navigation }) {
               <Path
                 d={HEART_PATH_D}
                 fill="none"
-                stroke={strokeColor}
-                strokeWidth="1.2"
+                stroke={selectedFramePattern ? "url(#framePattern)" : strokeColor}
+                strokeWidth="1.8"
                 strokeLinejoin="round"
               />
             </Svg>
@@ -408,7 +414,7 @@ export default function CustomizationScreen({ navigation }) {
             </View>
           )}
 
-          {/* Section 1: Frame */}
+          {/* Section 1: Frame Colors & Patterns */}
           <Text style={styles.sectionHeader}>Frame</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
             {frameColors.map((color) => (
@@ -417,14 +423,41 @@ export default function CustomizationScreen({ navigation }) {
                 style={[
                   styles.optionCard,
                   { backgroundColor: color },
-                  strokeColor === color && styles.selectedOptionCard,
+                  strokeColor === color && !selectedFramePattern && styles.selectedOptionCard,
                 ]}
-                onPress={() => setStrokeColor(color)}
+                onPress={() => {
+                  setSelectedFramePattern(null);
+                  setStrokeColor(color);
+                }}
               />
             ))}
-          </ScrollView>
+            {framePatterns.map((fp) => (
+              <TouchableOpacity
+                key={fp.id}
+                style={[
+                  styles.optionCard,
+                  styles.patternCard,
+                  selectedFramePattern === fp.uri && styles.selectedOptionCard,
+                ]}
+                onPress={() => setSelectedFramePattern(fp.uri)}
+              >
+                {fp.uri ? (
+                  <>
+                  <Image source = {{uri: fp.uri}} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  <View style={styles.patternOverlay} >
+                  <Text style={styles.patternLabelOnImage} numberOfLines = {1}> {fp.label}</Text>
+                  </View>
+                  </>
+                ) : (
+                  <Text style={styles.patternLabel}>{fp.label}</Text>
+                )}
+                </TouchableOpacity>
+                ))}
+                </ScrollView>
+                
+            
 
-          {/* Section 2: Heart Fill */}
+          {/* Section 2: Heart Background Fill & Patterns */}
           <Text style={styles.sectionHeader}>Background</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalRow}>
             {heartFillColors.map((color) => (
@@ -451,7 +484,16 @@ export default function CustomizationScreen({ navigation }) {
                 ]}
                 onPress={() => setSelectedPattern(p.uri)}
               >
-                <Text style={styles.patternLabel}>{p.label}</Text>
+                {p.uri ? (
+                  <>
+                  <Image source={{uri:p.uri}} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  <View style={styles.patternOverlay} >
+                  <Text style={styles.patternLabelOnImage} numberOfLines = {1}> {p.label}</Text>
+                  </View>
+                  </>
+                ) : (
+                  <Text style={styles.patternLabel}>{p.label}</Text>
+                )}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -589,12 +631,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 10,
   },
-  selectedStickerBorder: {
-    borderWidth: 1.5,
-    borderColor: "#007AFF",
-    borderRadius: 8,
-    borderStyle: "dashed",
-  },
   stickerImage: {
     width: "100%",
     height: "100%",
@@ -668,6 +704,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
     borderWidth: 1,
     borderColor: "#E5E5EA",
+    overflow: "hidden",
   },
   patternCard: {
     backgroundColor: "#F2F2F7",
@@ -682,6 +719,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#333",
+    textAlign: "center",
+    paddingHorizontal: 4,
+  },
+  patternOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.45)", 
+    paddingVertical: 3,
+    alignItems: "center",
+  },
+  patternLabelOnImage: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    textAlign: "center",
   },
   textInputRow: {
     flexDirection: "row",
