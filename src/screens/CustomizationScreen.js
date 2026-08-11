@@ -53,7 +53,6 @@ const HEART_FILL_COLORS = [
   "#222222", "#FFD166", "#83C5BE"
 ];
 
-// Optimized image URLs with lower quality preview sizes (w=150&q=50) & force caching
 const FRAME_PATTERNS = [
   { id: "gold-foil", uri: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&q=50", label: "Gold Foil" },
   { id: "silver-chrome", uri: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=150&q=50", label: "Chrome" },
@@ -91,13 +90,19 @@ function InteractiveStickerLayer({ layer, onSelect }) {
   const translateY = useSharedValue(layer.y || 0);
   const scale = useSharedValue(layer.scale || 1);
   const savedScale = useSharedValue(layer.scale || 1);
+  const rotation = useSharedValue(layer.rotation || 0);
+  const savedRotation = useSharedValue(layer.rotation || 0);
 
   useEffect(() => {
     if (layer.scale !== undefined) {
       scale.value = layer.scale;
       savedScale.value = layer.scale;
     }
-  }, [layer.scale]);
+    if (layer.rotation !== undefined) {
+      rotation.value = layer.rotation;
+      savedRotation.value = layer.rotation;
+    }
+  }, [layer.scale, layer.rotation]);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
@@ -109,6 +114,9 @@ function InteractiveStickerLayer({ layer, onSelect }) {
     });
 
   const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      if (onSelect) runOnJS(onSelect)();
+    })
     .onUpdate((e) => {
       scale.value = Math.max(0.4, Math.min(3.5, savedScale.value * e.scale));
     })
@@ -116,16 +124,28 @@ function InteractiveStickerLayer({ layer, onSelect }) {
       savedScale.value = scale.value;
     });
 
+  const rotationGesture = Gesture.Rotation()
+    .onStart(() => {
+      if (onSelect) runOnJS(onSelect)();
+    })
+    .onUpdate((e) => {
+      rotation.value = savedRotation.value + e.rotation;
+    })
+    .onEnd(() => {
+      savedRotation.value = rotation.value;
+    });
+
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value },
       { scale: scale.value },
+      { rotate: `${rotation.value}rad` },
     ],
   }));
 
   return (
-    <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
+    <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture)}>
       <Animated.View style={[styles.stickerContainer, animatedStyle]}>
         <Image
           source={layer.source}
@@ -158,7 +178,6 @@ export default function CustomizationScreen({ navigation }) {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
 
   useEffect(() => {
-    // Fast prefetch static images into cache
     FRAME_PATTERNS.forEach((fp) => {
       if (fp.uri) Image.prefetch(fp.uri);
     });
@@ -218,6 +237,7 @@ export default function CustomizationScreen({ navigation }) {
       x: 0,
       y: 0,
       scale: 1,
+      rotation: 0,
     };
     setLayers([...layers, newLayer]);
   };
@@ -230,6 +250,20 @@ export default function CustomizationScreen({ navigation }) {
           const currentScale = layer.scale || 1;
           const newScale = Math.max(0.4, Math.min(3.5, currentScale * factor));
           return { ...layer, scale: newScale };
+        }
+        return layer;
+      })
+    );
+  };
+
+  const updateSelectedRotation = (deltaDegrees) => {
+    if (!selectedLayerId) return;
+    const deltaRadians = (deltaDegrees * Math.PI) / 180;
+    setLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === selectedLayerId) {
+          const currentRotation = layer.rotation || 0;
+          return { ...layer, rotation: currentRotation + deltaRadians };
         }
         return layer;
       })
@@ -386,28 +420,42 @@ export default function CustomizationScreen({ navigation }) {
           </View>
         </ViewShot>
 
-        {/* Selected Layer Controls (Underneath Heart) */}
+        {/* Selected Layer Controls (Scale, Rotate, Delete) */}
         {selectedLayerId && (
           <View style={styles.selectedControlsRow}>
             <TouchableOpacity
-              style={styles.scaleBtn}
+              style={styles.controlBtn}
               onPress={() => updateSelectedScale(0.85)}
             >
-              <Text style={styles.scaleBtnText}>🔍 - Scale Down</Text>
+              <Text style={styles.controlBtnText}>🔍 -</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.scaleBtn}
+              style={styles.controlBtn}
               onPress={() => updateSelectedScale(1.15)}
             >
-              <Text style={styles.scaleBtnText}>🔍 + Scale Up</Text>
+              <Text style={styles.controlBtnText}>🔍 +</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.controlBtn}
+              onPress={() => updateSelectedRotation(-15)}
+            >
+              <Text style={styles.controlBtnText}>↺ 15°</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.controlBtn}
+              onPress={() => updateSelectedRotation(15)}
+            >
+              <Text style={styles.controlBtnText}>↻ 15°</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.deleteBtn}
               onPress={deleteSelectedLayer}
             >
-              <Text style={styles.deleteBtnText}>🗑 Delete</Text>
+              <Text style={styles.deleteBtnText}>🗑</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -636,19 +684,19 @@ const styles = StyleSheet.create({
   },
   selectedControlsRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     marginTop: 12,
     zIndex: 20,
   },
-  scaleBtn: {
+  controlBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  scaleBtnText: {
+  controlBtnText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#FFFFFF",
