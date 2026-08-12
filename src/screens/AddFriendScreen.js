@@ -53,16 +53,8 @@ const SectionListBasics = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Quick Add</Text>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Optional Bitmoji Banner / Header Component */}
-        <View style={styles.bitmojiHeaderContainer}>
-          <AddFriendBitmoji />
-        </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        
 
         <Text style={styles.sectionHeader}>Suggested Friends</Text>
 
