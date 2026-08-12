@@ -9,14 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-    Image,
+  Image,
+  Modal,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 // Hooks & Components
 import { useAuthentication } from "../../utils/hooks/useAuthentication";
 import { supabase } from "../../utils/hooks/supabase";
-
 
 export default function GroupchatScreen({ route }) {
   // Extract params or fall back to default room defaults
@@ -28,6 +28,9 @@ export default function GroupchatScreen({ route }) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
 
+  // Modal State for viewing heart images
+  const [selectedHeartUrl, setSelectedHeartUrl] = useState(null);
+
   // Determine user's fallback username
   const defaultUsername =
     user?.user_metadata?.username ||
@@ -38,9 +41,9 @@ export default function GroupchatScreen({ route }) {
   const [activeUsername, setActiveUsername] = useState(defaultUsername);
   const listRef = useRef(null);
 
-   async function sendHeart() {
+  async function sendHeart() {
     if (!user?.id) return;
-    const {error} = await supabase.from("group_messages").insert([
+    const { error } = await supabase.from("group_messages").insert([
       {
         group_id: targetGroupId,
         sender_id: user?.id,
@@ -55,8 +58,6 @@ export default function GroupchatScreen({ route }) {
     if (error) {
       console.error("Error sending heart to Supabase:", error.message);
     }
-    
-    ;
   }
 
   function renderMessage({ item }) {
@@ -64,60 +65,62 @@ export default function GroupchatScreen({ route }) {
     const senderName = isMe ? "ME" : item.sender_name || item.name || "Friend";
     const heartUrl = item.image_url || item.image;
     const isHeartMsg = item.is_heart || item.isHeart || !!heartUrl;
-      return (
-        <View style={styles.messageWrapper}>
-          <Text style={[styles.sender, { color: isMe ? "#FF2D55" : item.color || "#00A7B5" }]}>
-            {senderName}
-          </Text>
-  
-          <View style={[styles.messageRow, { borderLeftColor: isMe ? "#FF2D55" : item.color || "#00A7B5" }]}>
-            {/* Render Text Message */}
-            {item.text ? <Text style={styles.messageText}>{item.text}</Text> : null}
-  
-            {/* Render Heart/Image Message */}
-{isHeartMsg ? (
-  heartUrl ? (  
-    <Image
-      source={{ uri: heartUrl }}
-      style={styles.heartChatMessage}
-    />
-  ) : (
-    <Text style={styles.defaultHeartMessage}>💛</Text>
-  )
-) : null}
-          </View>
-        </View>
-      );
-    }
-     const fetchCustomHeart = async () => {
-        if(!user?.id) return;
-        try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select("custom_heart_url")
-            .eq("id", user.id)
-            .maybeSingle();
-    
-            if(data?.custom_heart_url) {
-              setCustomHeartUrl(data.custom_heart_url);
-            }
-            else if (user?.user_metadata?.custom_heart_url) {
-              setCustomHeartUrl(user.user_metadata.custom_heart_url);
-            }
-        }
-        catch (error) {
-          console.error("Error fetching custom heart:", error.message);
-        }
-      };
 
-  // ------------------------------------------------------------------
-  // Realtime & Initial Data Fetch
-  // ------------------------------------------------------------------
-   useEffect(() => {
-  if (user?.id) {
-    fetchCustomHeart();
+    return (
+      <View style={styles.messageWrapper}>
+        <Text style={[styles.sender, { color: isMe ? "#FF2D55" : item.color || "#00A7B5" }]}>
+          {senderName}
+        </Text>
+
+        <View style={[styles.messageRow, { borderLeftColor: isMe ? "#FF2D55" : item.color || "#00A7B5" }]}>
+          {/* Render Text Message */}
+          {item.text ? <Text style={styles.messageText}>{item.text}</Text> : null}
+
+          {/* Render Heart/Image Message */}
+          {isHeartMsg ? (
+            <TouchableOpacity
+              onPress={() => setSelectedHeartUrl(heartUrl || "default_emoji")}
+              activeOpacity={0.8}
+            >
+              {heartUrl ? (
+                <Image
+                  source={{ uri: heartUrl }}
+                  style={styles.heartChatMessage}
+                />
+              ) : (
+                <Text style={styles.defaultHeartMessage}>💛</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+    );
   }
-}, [user?.id]);
+
+  const fetchCustomHeart = async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("custom_heart_url")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (data?.custom_heart_url) {
+        setCustomHeartUrl(data.custom_heart_url);
+      } else if (user?.user_metadata?.custom_heart_url) {
+        setCustomHeartUrl(user.user_metadata.custom_heart_url);
+      }
+    } catch (error) {
+      console.error("Error fetching custom heart:", error.message);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchCustomHeart();
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     // 1. Fetch initial message history from Supabase
@@ -134,12 +137,8 @@ export default function GroupchatScreen({ route }) {
         setMessages(data);
       }
     }
-    
-
 
     fetchMessages();
-
-    
 
     // 2. Subscribe to REALTIME insert changes for this specific group room
     const channel = supabase
@@ -151,11 +150,9 @@ export default function GroupchatScreen({ route }) {
           schema: "public",
           table: "group_messages",
           filter: `group_id=eq.${targetGroupId}`,
-        }, // realtime any time database updated reading it and refresh
+        },
         (payload) => {
-          // Append incoming live message to state
           setMessages((prevMessages) => {
-            // Prevent duplicate rendering if already in state
             if (prevMessages.some((msg) => msg.id === payload.new.id)) {
               return prevMessages;
             }
@@ -165,25 +162,17 @@ export default function GroupchatScreen({ route }) {
       )
       .subscribe();
 
-    // Cleanup subscription on unmount
     return () => {
       supabase.removeChannel(channel);
     };
   }, [targetGroupId]);
 
-  // ------------------------------------------------------------------
-  // Message Handlers
-  // ------------------------------------------------------------------
- 
-   
   async function sendMessage() {
     if (!message.trim()) return;
 
     const textToSend = message.trim();
-    setMessage(""); // Clear input bar immediately
+    setMessage("");
 
-    // Insert message into Supabase
-    // (Supabase Realtime will automatically broadcast it back to setMessages)
     const { error } = await supabase.from("group_messages").insert([
       {
         group_id: targetGroupId,
@@ -199,15 +188,39 @@ export default function GroupchatScreen({ route }) {
     }
   }
 
-  // ------------------------------------------------------------------
-  // UI Renderers
-  // ------------------------------------------------------------------
-
-
   return (
     <SafeAreaView style={styles.container}>
-      {/* Name Selection Popup Modal */}
-     
+      {/* Heart Preview Modal */}
+      <Modal
+        visible={!!selectedHeartUrl}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedHeartUrl(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedHeartUrl(null)}
+        >
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeModalButton}
+              onPress={() => setSelectedHeartUrl(null)}
+            >
+              <Ionicons name="close-circle" size={36} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            {selectedHeartUrl === "default_emoji" ? (
+              <Text style={styles.largeHeartEmoji}>💛</Text>
+            ) : (
+              <Image
+                source={{ uri: selectedHeartUrl }}
+                style={styles.largeHeartImage}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -250,16 +263,16 @@ export default function GroupchatScreen({ route }) {
             </TouchableOpacity>
           )}
 
-              <TouchableOpacity onPress={sendHeart} style={styles.heartButton}>
-                      {customHeartUrl ? (
-                        <Image
-                          source={{ uri: customHeartUrl }}
-                          style={styles.heartImage}
-                        />
-                      ) : (
-                        <Text style={styles.emoji}>💛</Text>
-                      )}
-                </TouchableOpacity>
+          <TouchableOpacity onPress={sendHeart} style={styles.heartButton}>
+            {customHeartUrl ? (
+              <Image
+                source={{ uri: customHeartUrl }}
+                style={styles.heartImage}
+              />
+            ) : (
+              <Text style={styles.emoji}>💛</Text>
+            )}
+          </TouchableOpacity>
 
           <TouchableOpacity>
             <Ionicons name="add-circle-outline" size={28} color="#000" />
@@ -270,9 +283,6 @@ export default function GroupchatScreen({ route }) {
   );
 }
 
-// ------------------------------------------------------------------
-// Styles
-// ------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -328,12 +338,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-   heartImage: {
+  heartImage: {
     width: 32,
     height: 32,
     resizeMode: "contain",
   },
-   heartChatMessage: {
+  heartChatMessage: {
     width: 70,
     height: 70,
     marginTop: 5,
@@ -346,5 +356,30 @@ const styles = StyleSheet.create({
   defaultHeartMessage: {
     fontSize: 30,
     marginTop: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  closeModalButton: {
+    position: "absolute",
+    top: -50,
+    right: -10,
+    zIndex: 10,
+  },
+  largeHeartImage: {
+    width: 260,
+    height: 260,
+    resizeMode: "contain",
+  },
+  largeHeartEmoji: {
+    fontSize: 180,
   },
 });
